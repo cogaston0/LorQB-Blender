@@ -175,6 +175,11 @@ bpy.ops.object.empty_add(type='PLAIN_AXES', location=(-0.51, 0, 1), scale=(0.1, 
 hinge_3 = bpy.context.object
 hinge_3.name = "Hinge_Green_Yellow"
 
+# Hinge 4: Yellow — Blue (top edge)
+bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0.51, 1), scale=(0.1, 0.1, 0.1))
+hinge_4 = bpy.context.object
+hinge_4.name = "Hinge_Yellow_Blue"
+
 ################################################################################
 # SECTION 7: Move each cube's pivot point (origin) to its hinge location
 # Ball travel direction: Blue → Red → Green → Yellow
@@ -223,4 +228,5 @@ print("Hinges:")
 print("  Hinge_Blue_Red     @ ( 0.51,  0,    1) — right edge")
 print("  Hinge_Red_Green    @ ( 0,    -0.51, 1) — bottom edge")
 print("  Hinge_Green_Yellow @ (-0.51,  0,    1) — left edge")
+print("  Hinge_Yellow_Blue  @ ( 0,     0.51, 1) — top edge")
 print("Cube pivots set correctly to their respective hinges.")
