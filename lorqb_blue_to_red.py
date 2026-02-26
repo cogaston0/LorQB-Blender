@@ -14,7 +14,7 @@ def animate_blue_to_red():
     ball       = bpy.data.objects.get("Ball")
     blue_cube  = bpy.data.objects.get("Cube_Blue")
     red_cube   = bpy.data.objects.get("Cube_Red")
-    hinge      = bpy.data.objects.get("Hinge_Red_Blue")
+    hinge      = bpy.data.objects.get("Hinge_Blue_Red")
     
     if not all([ball, blue_cube, red_cube, hinge]):
         print("ERROR: Missing required objects")
