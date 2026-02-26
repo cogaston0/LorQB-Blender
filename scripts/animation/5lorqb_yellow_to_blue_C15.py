@@ -1,4 +1,23 @@
 # ============================================================================
+# 5lorqb_yellow_to_blue_C15.py
+# Blender 5.0.1
+# C15 — Yellow → Blue Transfer
+# Frames 720–960
+# Transfer at 840→841
+#
+# RULES:
+# - Child Of constraints only
+# - No parenting
+# - No physics
+# - No drivers
+# - Constant interpolation only
+# - Must return to rest state
+# ============================================================================
+
+import bpy
+import math
+
+# ============================================================================
 # 5lorqb_yellow_to_blue_C15.py  (Blender 5.0.1)
 # ----------------------------------------------------------------------------
 # LorQB Level 1 — Sequence C15 (Yellow -> Blue)
