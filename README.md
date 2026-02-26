@@ -15,8 +15,13 @@
 scripts/
 
 &nbsp; construction/   -> Scene building scripts (stable, do not modify)
+&nbsp;&nbsp;&nbsp; lorqb_with_pivots.py          -> Creates hollow cubes, ball, and hinge pivots
 
 &nbsp; animation/      -> Per-sequence animation scripts (C12, C15, etc.)
+&nbsp;&nbsp;&nbsp; lorqb_blue_to_red.py          -> Blue → Red (hinge rotation, ball transfer)
+&nbsp;&nbsp;&nbsp; lorqb_green_flip_cycle.py     -> Green flip cycle (Green → Yellow)
+&nbsp;&nbsp;&nbsp; lorqb_red_to_green_C13.py     -> C13: Red → Green (frames 241–480)
+&nbsp;&nbsp;&nbsp; 5lorqb_yellow_to_blue_C15.py  -> C15: Yellow → Blue (hinge rotation)
 
 &nbsp; diagnostic/     -> Debugging and state-check scripts
 
