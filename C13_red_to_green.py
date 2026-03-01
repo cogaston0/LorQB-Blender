@@ -65,6 +65,9 @@ def key_influence(obj, constraint_name, frame, value):
 ################################################################################
 def setup_red_to_green():
 
+    # Deselect all before any context-sensitive operations
+    bpy.ops.object.select_all(action='DESELECT')
+
     # --- 5A: Validate required objects ---
     red      = bpy.data.objects.get("Cube_Red")
     green    = bpy.data.objects.get("Cube_Green")
@@ -88,6 +91,7 @@ def setup_red_to_green():
     if hinge_rg.animation_data:
         hinge_rg.animation_data_clear()
     bpy.context.scene.frame_set(F_START)
+    bpy.context.view_layer.update()
     hinge_rg.rotation_euler = (0, 0, 0)
 
     # --- 5C: Parent Blue to Red (passive carry) ---
@@ -101,35 +105,49 @@ def setup_red_to_green():
         print("Red parented to Hinge_Red_Green.")
 
     # --- 5E: Create Seat_Red (ball rest position inside Red) ---
-    # Created here so C13 works standalone without depending on C12
+    # Reuse existing Seat_Red if it already has the correct parent to preserve
+    # any inverse matrix set by C12 or scene_build.py.
     seat_red = bpy.data.objects.get("Seat_Red")
-    if seat_red:
-        bpy.data.objects.remove(seat_red, do_unlink=True)
-    seat_red = bpy.data.objects.new("Seat_Red", None)
-    seat_red.empty_display_type = 'SPHERE'
-    seat_red.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_red)
-    seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
-    seat_red.parent = red
-    seat_red.location = seat_red_local
-    print("Seat_Red created inside Cube_Red.")
+    if seat_red and seat_red.parent == red:
+        print("Seat_Red already exists with correct parent — reusing.")
+    else:
+        if seat_red:
+            bpy.data.objects.remove(seat_red, do_unlink=True)
+        seat_red = bpy.data.objects.new("Seat_Red", None)
+        seat_red.empty_display_type = 'SPHERE'
+        seat_red.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat_red)
+        seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
+        seat_red.parent = red
+        seat_red.location = seat_red_local
+        print("Seat_Red created inside Cube_Red.")
 
     # --- 5F: Create Seat_Green (ball rest position inside Green) ---
+    # Reuse existing Seat_Green if it already has the correct parent (e.g. from
+    # scene_build.py) to avoid destroying a correctly-positioned empty.
     seat_green = bpy.data.objects.get("Seat_Green")
-    if seat_green:
-        bpy.data.objects.remove(seat_green, do_unlink=True)
-    seat_green = bpy.data.objects.new("Seat_Green", None)
-    seat_green.empty_display_type = 'SPHERE'
-    seat_green.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_green)
-    seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-    seat_green.parent = green
-    seat_green.location = seat_green_local
-    print("Seat_Green created inside Cube_Green.")
+    if seat_green and seat_green.parent == green:
+        print("Seat_Green already exists with correct parent — reusing.")
+    else:
+        if seat_green:
+            bpy.data.objects.remove(seat_green, do_unlink=True)
+        seat_green = bpy.data.objects.new("Seat_Green", None)
+        seat_green.empty_display_type = 'SPHERE'
+        seat_green.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat_green)
+        bpy.context.view_layer.update()
+        seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
+        seat_green.parent = green
+        seat_green.location = seat_green_local
+        print("Seat_Green created inside Cube_Green.")
 
     # --- 5G: Ball COPY_TRANSFORMS constraints ---
-    # Clear all existing constraints on ball first for clean state
-    ball.constraints.clear()
+    # Only remove constraints that C13 will replace; leave any others intact
+    # so that C12's Latch_Red inverse matrix is not discarded prematurely.
+    for name in ("Latch_Red", "Latch_Green"):
+        con = ball.constraints.get(name)
+        if con:
+            ball.constraints.remove(con)
 
     latch_red = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_red.name = "Latch_Red"
