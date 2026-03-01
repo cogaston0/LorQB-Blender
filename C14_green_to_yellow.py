@@ -1,122 +1,135 @@
 import bpy
+import math
 
 ################################################################################
-# SECTION 1: Animation Function
+# SECTION 1: Animation Function - Green → Yellow with matrix_parent_inverse fix
+# FIXED: Now uses same direct parenting approach as C12 (matrix_parent_inverse)
 ################################################################################
-def animate_green_flip_cycle():
-    """Animate Green cube flip cycle: 0° → 90° → 180° → 90° → 0° (240 frames)"""
-    
+
+def animate_green_to_yellow():
+    """Animate ball from Green to Yellow with proper parent inverse matrices"""
+
     # Get objects
-    ball = bpy.data.objects.get("Ball")
+    ball       = bpy.data.objects.get("Ball")
     green_cube = bpy.data.objects.get("Cube_Green")
     yellow_cube = bpy.data.objects.get("Cube_Yellow")
-    hinge_green_yellow = bpy.data.objects.get("Hinge_Green_Yellow")
-    
-    if not all([ball, green_cube, yellow_cube, hinge_green_yellow]):
+    hinge      = bpy.data.objects.get("Hinge_Green_Yellow")
+
+    if not all([ball, green_cube, yellow_cube, hinge]):
         print("ERROR: Missing required objects")
         return
-    
+
     # Clear existing animation data
-    if ball.animation_data:
-        ball.animation_data_clear()
-    if hinge_green_yellow.animation_data:
-        hinge_green_yellow.animation_data_clear()
-    
-    # Frame 1: Rotation = 0°, Ball parent to Green
+    for obj in [ball, hinge, green_cube]:
+        if obj.animation_data:
+            obj.animation_data_clear()
+
+    # -------------------------------------------------------------------------
+    # SETUP FRAME 1: Parent with matrix_parent_inverse fix
+    # -------------------------------------------------------------------------
     bpy.context.scene.frame_set(1)
+
+    # Parent Green cube to hinge (WITH matrix_parent_inverse to stay in place)
+    green_cube.parent = hinge
+    green_cube.parent_type = 'OBJECT'
+    green_cube.matrix_parent_inverse = hinge.matrix_world.inverted()
+
+    # Parent ball to Green cube (NO matrix_parent_inverse - ball stays inside cube)
     ball.parent = green_cube
-    hinge_green_yellow.rotation_euler[0] = 0
-    hinge_green_yellow.keyframe_insert(data_path="rotation_euler", index=0, frame=1)
-    
-    # Frame 60: Rotation = 90° (1.5708 radians)
+    ball.parent_type = 'OBJECT'
+
+    # Keyframe: Hinge at 0°
+    hinge.rotation_euler[0] = 0.0
+    hinge.keyframe_insert(data_path="rotation_euler", index=0, frame=1)
+
+    # -------------------------------------------------------------------------
+    # FRAME 60: Rotate to 90°
+    # -------------------------------------------------------------------------
     bpy.context.scene.frame_set(60)
-    hinge_green_yellow.rotation_euler[0] = 1.5708
-    hinge_green_yellow.keyframe_insert(data_path="rotation_euler", index=0, frame=60)
-    
-    # Frame 120: Rotation = 180° (3.14159 radians), Ball transfer to Yellow
+    hinge.rotation_euler[0] = math.radians(90)
+    hinge.keyframe_insert(data_path="rotation_euler", index=0, frame=60)
+
+    # -------------------------------------------------------------------------
+    # FRAME 120: Rotate to 180° (holes align, Green on top of Yellow)
+    # -------------------------------------------------------------------------
     bpy.context.scene.frame_set(120)
-    hinge_green_yellow.rotation_euler[0] = 3.14159
-    hinge_green_yellow.keyframe_insert(data_path="rotation_euler", index=0, frame=120)
-    
-    # Clear parent and set ball to Yellow cube's bottom-center position
-    ball.parent = None
-    
-    # Calculate Yellow cube's bottom-center position
-    yellow_dims = yellow_cube.dimensions
-    yellow_loc = yellow_cube.location
-    ball_radius = 0.25
-    
-    ball.location = (
-        yellow_loc.x,
-        yellow_loc.y,
-        yellow_loc.z - (yellow_dims.z / 2) + ball_radius * 0.99
-    )
-    
-    # Now parent to Yellow
+    hinge.rotation_euler[0] = math.radians(180)
+    hinge.keyframe_insert(data_path="rotation_euler", index=0, frame=120)
+
+    # -------------------------------------------------------------------------
+    # FRAME 121: Ball transfers from Green to Yellow (NO matrix_parent_inverse)
+    # -------------------------------------------------------------------------
+    bpy.context.scene.frame_set(121)
     ball.parent = yellow_cube
-    
-    # Frame 180: Rotation = 90° (1.5708 radians)
+    ball.parent_type = 'OBJECT'
+
+    # -------------------------------------------------------------------------
+    # FRAME 180: Return to 90°
+    # -------------------------------------------------------------------------
     bpy.context.scene.frame_set(180)
-    hinge_green_yellow.rotation_euler[0] = 1.5708
-    hinge_green_yellow.keyframe_insert(data_path="rotation_euler", index=0, frame=180)
-    
-    # Frame 240: Rotation = 0° (back to base)
+    hinge.rotation_euler[0] = math.radians(90)
+    hinge.keyframe_insert(data_path="rotation_euler", index=0, frame=180)
+
+    # -------------------------------------------------------------------------
+    # FRAME 240: Return to 0° (Green back to flat)
+    # -------------------------------------------------------------------------
     bpy.context.scene.frame_set(240)
-    hinge_green_yellow.rotation_euler[0] = 0
-    hinge_green_yellow.keyframe_insert(data_path="rotation_euler", index=0, frame=240)
-    
+    hinge.rotation_euler[0] = 0.0
+    hinge.keyframe_insert(data_path="rotation_euler", index=0, frame=240)
+
     # Reset to frame 1
     bpy.context.scene.frame_set(1)
-    
-    print("=== Green Flip Cycle Complete ===")
-    print("Keyframes: f1(0°), f60(90°), f120(180°), f180(90°), f240(0°)")
-    print("Ball transfers to Yellow at frame 120")
+
+    print("=== Green → Yellow FIXED ===")
+    print("f1(0°) → f60(90°) → f120(180°) → f121(transfer) → f180(90°) → f240(0°)")
+    print("matrix_parent_inverse applied ONLY to cube (ball stays inside)")
 
 ################################################################################
-# SECTION 2: Create 3D Viewport Button Panel
+# SECTION 2: Panel and Operator
 ################################################################################
+
 class LORQB_PT_AnimationPanel(bpy.types.Panel):
-    """Creates a Panel in the 3D View N-panel"""
     bl_label = "LorQB Animation"
     bl_idname = "LORQB_PT_animation_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'LorQB'
-    
+
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.green_flip_cycle", text="Green Flip Cycle")
+        layout.operator("lorqb.green_to_yellow", text="Green → Yellow (FIXED)")
 
-class LORQB_OT_GreenFlipCycle(bpy.types.Operator):
-    """Animate Green cube flip cycle with ball transfer"""
-    bl_idname = "lorqb.green_flip_cycle"
-    bl_label = "Green Flip Cycle"
+class LORQB_OT_GreenToYellow(bpy.types.Operator):
+    bl_idname = "lorqb.green_to_yellow"
+    bl_label = "Green to Yellow"
     bl_options = {'REGISTER', 'UNDO'}
-    
+
     def execute(self, context):
-        animate_green_flip_cycle()
-        self.report({'INFO'}, "Green Flip Cycle: 240 frames created")
+        animate_green_to_yellow()
+        self.report({'INFO'}, "Green → Yellow animation complete (FIXED)")
         return {'FINISHED'}
 
 ################################################################################
 # SECTION 3: Register Panel and Operator
 ################################################################################
+
 def register():
     bpy.utils.register_class(LORQB_PT_AnimationPanel)
-    bpy.utils.register_class(LORQB_OT_GreenFlipCycle)
+    bpy.utils.register_class(LORQB_OT_GreenToYellow)
 
 def unregister():
     bpy.utils.unregister_class(LORQB_PT_AnimationPanel)
-    bpy.utils.unregister_class(LORQB_OT_GreenFlipCycle)
+    bpy.utils.unregister_class(LORQB_OT_GreenToYellow)
 
-# Run registration
+################################################################################
+# SECTION 4: Main Execution
+################################################################################
+
 if __name__ == "__main__":
-    # Unregister first to avoid duplicate registration errors
     try:
         unregister()
     except:
         pass
-    
     register()
-    print("\n=== LorQB Animation Panel Added ===")
-    print("Open 3D View > N-panel > LorQB tab > Click 'Green Flip Cycle' button")
+    print("\n=== LorQB Green → Yellow Panel Ready (FIXED) ===")
+    print("3D View > N-panel > LorQB > Click 'Green → Yellow (FIXED)'")
