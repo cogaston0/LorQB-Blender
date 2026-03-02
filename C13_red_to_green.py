@@ -3,7 +3,7 @@
 # C13 — Red → Green
 # Frames 241 – 480 | Transfer at frame 360 → 361
 # Chain: Blue — Red — Green — Yellow
-# Hinge: Hinge_Red_Green (Y-axis rotation, ROT_SIGN = +1.0)
+# Hinge: Hinge_Red_Green (Y-axis rotation, ROT_SIGN = -1.0)
 # Ball rides Cube_Red (Latch_Red) → drops into Cube_Green (Latch_Green)
 # Architecture: matches C12 reference standard
 # ============================================================================
@@ -23,7 +23,7 @@ F_RET   = 420   # Return: Red at 90° on way back
 F_END   = 480   # End:   Red at 0°, ball in Green
 
 ROT_AXIS = 1        # Y-axis index in rotation_euler
-ROT_SIGN = 1.0      # Positive Y rotation swings Red correctly over Green
+ROT_SIGN = -1.0     # Negative Y rotation swings Red correctly over Green
 
 SEAT_RED_WORLD   = mathutils.Vector((0.51,  -0.51, 0.25))
 SEAT_GREEN_WORLD = mathutils.Vector((-0.51, -0.51, 0.25))
@@ -174,7 +174,7 @@ def setup_red_to_green():
     # --- 7E: Create Seat_Red empty parented to Cube_Red ---
     seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
     print(f"Seat_Red world (target): {SEAT_RED_WORLD[:]}")
-    print(f"Seat_Red local (converted): {seat_red_local[:]}")
+    print(f"Seat_Red local (converted): {seat_red_local[:]}\n")
 
     seat_red = bpy.data.objects.new("Seat_Red", None)
     seat_red.empty_display_type = 'SPHERE'
@@ -187,7 +187,7 @@ def setup_red_to_green():
     # --- 7F: Create Seat_Green empty parented to Cube_Green ---
     seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
     print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
-    print(f"Seat_Green local (converted): {seat_green_local[:]}")
+    print(f"Seat_Green local (converted): {seat_green_local[:]}\n")
 
     seat_green = bpy.data.objects.new("Seat_Green", None)
     seat_green.empty_display_type = 'SPHERE'
@@ -198,7 +198,8 @@ def setup_red_to_green():
     print("Seat_Green created inside Cube_Green.")
 
     bpy.context.view_layer.update()
-    print(f"Seat_Red   world actual: {seat_red.matrix_world.translation[:]}\nSeat_Green world actual: {seat_green.matrix_world.translation[:]}\n")
+    print(f"Seat_Red   world actual: {seat_red.matrix_world.translation[:]}\nSeat_Green world actual: {seat_green.matrix_world.translation[:]}
+")
 
     # --- 7G: Ball COPY_TRANSFORMS constraints ---
     latch_red = ball.constraints.new(type='COPY_TRANSFORMS')
@@ -298,7 +299,8 @@ def register():
     _unregister_all_lorqb()
     bpy.utils.register_class(LORQB_PT_C13Panel)
     bpy.utils.register_class(LORQB_OT_RedToGreen)
-    print("\n" + "=" * 50)
+    print("
+" + "=" * 50)
     print("✓ LorQB C13 Panel Ready.")
     print("3D View → N-panel → LorQB → 'Run C13: Red → Green'")
     print("=" * 50 + "\n")
