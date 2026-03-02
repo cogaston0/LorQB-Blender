@@ -5,6 +5,8 @@
 # Chain: Blue — Red — Green — Yellow
 # Hinge: Hinge_Green_Yellow (X-axis rotation, ROT_SIGN = +1.0)
 # Ball rides Cube_Green (Latch_Green) → drops into Cube_Yellow (Latch_Yellow)
+# Blue + Red + Hinge_Blue_Red + Hinge_Red_Green ride passively with Green.
+# Only Hinge_Green_Yellow is keyed. No other hinges are touched.
 # Architecture: matches C12/C13 reference standard
 # ============================================================================
 
@@ -29,45 +31,31 @@ SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.25))
 SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
 
 ################################################################################
-# SECTION 2: RESET — Full scene reset to canonical state
-# Every C script must call this first. No script depends on any other.
+# SECTION 2: RESET — Clear only Hinge_Green_Yellow and ball state.
+# Blue, Red, Hinge_Blue_Red, Hinge_Red_Green are NOT touched —
+# they ride passively as part of the physical rig attached to Green.
 ################################################################################
-def reset_scene_to_canonical():
-    """Reset ALL objects to canonical positions. No script should depend on
-    any other — each script calls this first and sets its own starting state."""
+def reset_c14_state():
+    """Reset only C14-owned animation data. Do not touch Blue/Red hinges."""
 
-    all_names = [
-        "Ball",
-        "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
-        "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
-    ]
+    # Clear only the hinge we drive
+    hinge = bpy.data.objects.get("Hinge_Green_Yellow")
+    if hinge and hinge.animation_data:
+        hinge.animation_data_clear()
 
-    # 1. Clear ALL animation data from every relevant object
-    for name in all_names:
-        obj = bpy.data.objects.get(name)
-        if obj and obj.animation_data:
-            obj.animation_data_clear()
-
-    # 2. Clear ALL constraints from ball
+    # Clear ball constraints from any prior run
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
-    # 3. Reset ALL hinges to 0 rotation
-    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
-        hinge = bpy.data.objects.get(hinge_name)
-        if hinge:
-            hinge.rotation_mode = 'XYZ'
-            hinge.rotation_euler = (0.0, 0.0, 0.0)
-
-    # 4. Remove stale Seat empties from prior runs
-    for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
+    # Remove stale Seat empties from prior runs
+    for seat_name in ["Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
 
     bpy.context.view_layer.update()
-    print("=== Scene reset to canonical state ===")
+    print("=== C14 state reset (Hinge_Green_Yellow + ball only) ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -131,22 +119,18 @@ def parent_preserve_world(child, new_parent):
 def setup_green_to_yellow():
     print("=== C14 Start: Green → Yellow ===")
 
-    # --- STEP 0: Full scene reset (independence guarantee) ---
-    reset_scene_to_canonical()
+    # --- STEP 0: Reset only C14-owned state ---
+    reset_c14_state()
 
     # --- 7A: Validate all required objects ---
     green  = bpy.data.objects.get("Cube_Green")
     yellow = bpy.data.objects.get("Cube_Yellow")
-    red    = bpy.data.objects.get("Cube_Red")
-    blue   = bpy.data.objects.get("Cube_Blue")
     ball   = bpy.data.objects.get("Ball")
     hinge  = bpy.data.objects.get("Hinge_Green_Yellow")
 
     missing = [n for n, o in [
         ("Cube_Green",         green),
         ("Cube_Yellow",        yellow),
-        ("Cube_Red",           red),
-        ("Cube_Blue",          blue),
         ("Ball",               ball),
         ("Hinge_Green_Yellow", hinge),
     ] if o is None]
@@ -161,26 +145,19 @@ def setup_green_to_yellow():
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    # --- 7C: Parent Blue to Red (passive carry) ---
-    if blue.parent != red:
-        parent_preserve_world(blue, red)
-        print("Blue parented to Red — passive carry.")
-
-    # --- 7D: Parent Red to Green (passive carry) ---
-    if red.parent != green:
-        parent_preserve_world(red, green)
-        print("Red parented to Green — passive carry.")
-
-    # --- 7E: Parent Green to Hinge_Green_Yellow ---
+    # --- 7C: Parent Green to Hinge_Green_Yellow (if not already) ---
+    # Blue and Red ride with Green via the physical rig — do NOT re-parent them.
     if green.parent != hinge:
         parent_preserve_world(green, hinge)
         print("Green parented to Hinge_Green_Yellow.")
+    else:
+        print("Green already parented to Hinge_Green_Yellow — skipped.")
 
     bpy.context.view_layer.update()
 
-    # --- 7F: Create Seat_Green empty parented to Cube_Green ---
+    # --- 7D: Create Seat_Green empty parented to Cube_Green ---
     seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
+    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}\n")
     print(f"Seat_Green local (converted): {seat_green_local[:]}\n")
 
     seat_green = bpy.data.objects.new("Seat_Green", None)
@@ -191,9 +168,9 @@ def setup_green_to_yellow():
     seat_green.location = seat_green_local
     print("Seat_Green created inside Cube_Green.")
 
-    # --- 7G: Create Seat_Yellow empty parented to Cube_Yellow ---
+    # --- 7E: Create Seat_Yellow empty parented to Cube_Yellow ---
     seat_yellow_local = yellow.matrix_world.inverted() @ SEAT_YELLOW_WORLD
-    print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}")
+    print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}\n")
     print(f"Seat_Yellow local (converted): {seat_yellow_local[:]}\n")
 
     seat_yellow = bpy.data.objects.new("Seat_Yellow", None)
@@ -208,7 +185,7 @@ def setup_green_to_yellow():
     print(f"Seat_Green  world actual: {seat_green.matrix_world.translation[:]}\n")
     print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}\n")
 
-    # --- 7H: Ball COPY_TRANSFORMS constraints ---
+    # --- 7F: Ball COPY_TRANSFORMS constraints ---
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name = "Latch_Green"
     latch_green.target = seat_green
@@ -219,8 +196,9 @@ def setup_green_to_yellow():
     latch_yellow.target = seat_yellow
     print("Latch_Yellow created.")
 
-    # --- 7I: Keyframe hinge rotation X-axis (LINEAR) ---
-    # 0° → 90° → 180° hold → 180° → 90° → 0°
+    # --- 7G: Keyframe Hinge_Green_Yellow X-axis ONLY (LINEAR) ---
+    # Blue, Red, Hinge_Blue_Red, Hinge_Red_Green stay at 0° —
+    # they travel as passengers of Green. No keyframes on them.
     key_rot_x(hinge, F_START,   0)
     key_rot_x(hinge, F_MID,    90)
     key_rot_x(hinge, F_HOLD,  180)
@@ -229,7 +207,7 @@ def setup_green_to_yellow():
     key_rot_x(hinge, F_END,     0)
     print("Hinge_Green_Yellow rotation keyed — LINEAR.")
 
-    # --- 7J: Keyframe constraint influences (CONSTANT) ---
+    # --- 7H: Keyframe constraint influences (CONSTANT) ---
     # Before swap: Latch_Green=1.0, Latch_Yellow=0.0
     # After swap:  Latch_Green=0.0, Latch_Yellow=1.0
     key_influence(ball, "Latch_Green",  F_START, 1.0)
@@ -242,7 +220,7 @@ def setup_green_to_yellow():
     key_influence(ball, "Latch_Yellow", F_END,   1.0)
     print("Ball influences keyed — CONSTANT.")
 
-    # --- 7K: Set frame range and reset to F_START ---
+    # --- 7I: Set frame range and reset to F_START ---
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
@@ -250,7 +228,7 @@ def setup_green_to_yellow():
     print("=== C14 Complete: Green → Yellow ===")
     print(f"Frames {F_START}–{F_END} | Transfer at frame {F_HOLD}→{F_SWAP}")
     print(f"ROT_SIGN: {ROT_SIGN} | Axis: X | Hinge: Hinge_Green_Yellow")
-    print(f"Latch_Yellow left active at influence 1.0.")
+    print("Blue + Red ride passively — Hinge_Blue_Red + Hinge_Red_Green NOT keyed.")
     return True
 
 ################################################################################
@@ -270,6 +248,7 @@ class LORQB_PT_C14Panel(bpy.types.Panel):
         col.label(text="Transfer: Frame 600 → 601 @ 180°")
         col.separator()
         col.label(text="● Blue → Red → Green → Yellow")
+        col.label(text="Only Hinge_Green_Yellow rotates")
 
 class LORQB_OT_GreenToYellow(bpy.types.Operator):
     bl_idname  = "lorqb.green_to_yellow"
