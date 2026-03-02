@@ -36,24 +36,16 @@ SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
 # they ride passively as part of the physical rig attached to Green.
 ################################################################################
 def reset_c14_state():
-    """Reset only C14-owned animation data. Do not touch Blue/Red hinges."""
-
-    # Clear only the hinge we drive
     hinge = bpy.data.objects.get("Hinge_Green_Yellow")
     if hinge and hinge.animation_data:
         hinge.animation_data_clear()
-
-    # Clear ball constraints from any prior run
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
-
-    # Remove stale Seat empties from prior runs
     for seat_name in ["Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
-
     bpy.context.view_layer.update()
     print("=== C14 state reset (Hinge_Green_Yellow + ball only) ===")
 
@@ -119,10 +111,8 @@ def parent_preserve_world(child, new_parent):
 def setup_green_to_yellow():
     print("=== C14 Start: Green → Yellow ===")
 
-    # --- STEP 0: Reset only C14-owned state ---
     reset_c14_state()
 
-    # --- 7A: Validate all required objects ---
     green  = bpy.data.objects.get("Cube_Green")
     yellow = bpy.data.objects.get("Cube_Yellow")
     ball   = bpy.data.objects.get("Ball")
@@ -139,14 +129,12 @@ def setup_green_to_yellow():
         print("ERROR: Missing objects:", missing)
         return False
 
-    # --- 7B: Reset hinge rotation ---
     bpy.context.scene.frame_set(F_START)
     hinge.rotation_mode = 'XYZ'
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    # --- 7C: Parent Green to Hinge_Green_Yellow (if not already) ---
-    # Blue and Red ride with Green via the physical rig — do NOT re-parent them.
+    # Parent Green to Hinge_Green_Yellow only — Blue/Red ride with the rig
     if green.parent != hinge:
         parent_preserve_world(green, hinge)
         print("Green parented to Hinge_Green_Yellow.")
@@ -155,11 +143,9 @@ def setup_green_to_yellow():
 
     bpy.context.view_layer.update()
 
-    # --- 7D: Create Seat_Green empty parented to Cube_Green ---
     seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}\n")
+    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
     print(f"Seat_Green local (converted): {seat_green_local[:]}\n")
-
     seat_green = bpy.data.objects.new("Seat_Green", None)
     seat_green.empty_display_type = 'SPHERE'
     seat_green.empty_display_size = 0.08
@@ -168,11 +154,9 @@ def setup_green_to_yellow():
     seat_green.location = seat_green_local
     print("Seat_Green created inside Cube_Green.")
 
-    # --- 7E: Create Seat_Yellow empty parented to Cube_Yellow ---
     seat_yellow_local = yellow.matrix_world.inverted() @ SEAT_YELLOW_WORLD
-    print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}\n")
+    print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}")
     print(f"Seat_Yellow local (converted): {seat_yellow_local[:]}\n")
-
     seat_yellow = bpy.data.objects.new("Seat_Yellow", None)
     seat_yellow.empty_display_type = 'SPHERE'
     seat_yellow.empty_display_size = 0.08
@@ -182,10 +166,9 @@ def setup_green_to_yellow():
     print("Seat_Yellow created inside Cube_Yellow.")
 
     bpy.context.view_layer.update()
-    print(f"Seat_Green  world actual: {seat_green.matrix_world.translation[:]}\n")
+    print(f"Seat_Green  world actual: {seat_green.matrix_world.translation[:]}")
     print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}\n")
 
-    # --- 7F: Ball COPY_TRANSFORMS constraints ---
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name = "Latch_Green"
     latch_green.target = seat_green
@@ -196,9 +179,7 @@ def setup_green_to_yellow():
     latch_yellow.target = seat_yellow
     print("Latch_Yellow created.")
 
-    # --- 7G: Keyframe Hinge_Green_Yellow X-axis ONLY (LINEAR) ---
-    # Blue, Red, Hinge_Blue_Red, Hinge_Red_Green stay at 0° —
-    # they travel as passengers of Green. No keyframes on them.
+    # Only Hinge_Green_Yellow is keyed — Blue/Red/Hinge_Blue_Red/Hinge_Red_Green NOT touched
     key_rot_x(hinge, F_START,   0)
     key_rot_x(hinge, F_MID,    90)
     key_rot_x(hinge, F_HOLD,  180)
@@ -207,9 +188,6 @@ def setup_green_to_yellow():
     key_rot_x(hinge, F_END,     0)
     print("Hinge_Green_Yellow rotation keyed — LINEAR.")
 
-    # --- 7H: Keyframe constraint influences (CONSTANT) ---
-    # Before swap: Latch_Green=1.0, Latch_Yellow=0.0
-    # After swap:  Latch_Green=0.0, Latch_Yellow=1.0
     key_influence(ball, "Latch_Green",  F_START, 1.0)
     key_influence(ball, "Latch_Yellow", F_START, 0.0)
     key_influence(ball, "Latch_Green",  F_HOLD,  1.0)
@@ -220,7 +198,6 @@ def setup_green_to_yellow():
     key_influence(ball, "Latch_Yellow", F_END,   1.0)
     print("Ball influences keyed — CONSTANT.")
 
-    # --- 7I: Set frame range and reset to F_START ---
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
