@@ -38,7 +38,15 @@ Yellow — Green — Red — Blue (snake chain, hinged on top)
 
 \- Goal: complete all sequences for Level 1 with modular, reorderable scripts.
 
-\- Current focus: C15 (Yellow -> Blue).
+\- C12: Blue → Red (lorqb\_blue\_to\_red.py, frames 1–240) ✓
+
+\- C13: Red → Green (lorqb\_red\_to\_green\_C13.py, frames 241–480) ✓
+
+\- C16: Green → Yellow (scripts/animation/6lorqb\_green\_to\_yellow\_C16.py, frames 481–720) ✓
+
+\- C15: Yellow → Blue (scripts/animation/5lorqb\_yellow\_to\_blue\_C15.py) — hinge block only; ball/seat/latch block pending.
+
+\- Current focus: C15 complete ball transfer block.
 
 
 
