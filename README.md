@@ -58,3 +58,16 @@ Yellow — Green — Red — Blue (snake chain, hinged on top)
 
 \- Commit after every confirmed working step
 
+
+
+\## Python Scripts
+
+| Script | Description |
+|--------|-------------|
+| C10\_scene\_build.py | Builds the initial LorQB scene: clears all objects, then creates four hollow colored cubes (Blue, Red, Green, Yellow) with circular holes, a ball inside Cube\_Blue, and three hinge pivot empties. |
+| C12\_blue\_to\_red.py | Animates the Blue→Red sequence (frames 1–240): parents Cube\_Blue to Hinge\_Blue\_Red, rotates it 180° on the X-axis, and transfers the ball from Cube\_Blue to Cube\_Red at frame 120→121 using COPY\_TRANSFORMS constraints. |
+| C13\_red\_to\_green.py | Animates the Red→Green sequence (frames 241–480): parents Cube\_Red to Hinge\_Red\_Green, rotates it 180° on the Y-axis, and transfers the ball from Cube\_Red to Cube\_Green at frame 360→361. |
+| C14\_green\_to\_yellow.py | Animates the Green→Yellow sequence (frames 481–720): parents Cube\_Green to Hinge\_Green\_Yellow, rotates it 180° on the X-axis, and transfers the ball from Cube\_Green to Cube\_Yellow at frame 600→601. |
+| C15\_yellow\_to\_blue.py | Keys Hinge\_Red\_Green with a 0°→180°→0° Y-axis rotation using CONSTANT interpolation for the Yellow→Blue transfer; currently implements the hinge-rotation block only. |
+| lorQB\_Master\_Runnet | Python script (no .py extension) that registers a Blender N-panel ("LorQB Sequences") with operator buttons to run each animation sequence (C12–C15) individually. |
+
