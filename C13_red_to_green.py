@@ -1,5 +1,5 @@
 # ============================================================================
-# lorqb_red_to_green_C13.py  (Blender 5.0.1)
+# C13_red_to_green.py  (Blender 5.0.1)
 # C13 — Red → Green
 # Frames 241 – 480 | Transfer at frame 360 → 361
 # Chain: Blue — Red — Green — Yellow
@@ -30,37 +30,29 @@ SEAT_GREEN_WORLD = mathutils.Vector((-0.51, -0.51, 0.25))
 
 ################################################################################
 # SECTION 2: RESET — Full scene reset to canonical state
-# Every C script must call this first. No script depends on any other.
 ################################################################################
 def reset_scene_to_canonical():
-    """Reset ALL objects to canonical positions. No script should depend on
-    any other — each script calls this first and sets its own starting state."""
-
     all_names = [
         "Ball",
         "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
         "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
     ]
 
-    # 1. Clear ALL animation data from every relevant object
     for name in all_names:
         obj = bpy.data.objects.get(name)
         if obj and obj.animation_data:
             obj.animation_data_clear()
 
-    # 2. Clear ALL constraints from ball
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
-    # 3. Reset ALL hinges to 0 rotation
     for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
         hinge = bpy.data.objects.get(hinge_name)
         if hinge:
             hinge.rotation_mode = 'XYZ'
             hinge.rotation_euler = (0.0, 0.0, 0.0)
 
-    # 4. Remove stale Seat empties from prior runs
     for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
@@ -131,10 +123,8 @@ def parent_preserve_world(child, new_parent):
 def setup_red_to_green():
     print("=== C13 Start: Red → Green ===")
 
-    # --- STEP 0: Full scene reset (independence guarantee) ---
     reset_scene_to_canonical()
 
-    # --- 7A: Validate all required objects ---
     red      = bpy.data.objects.get("Cube_Red")
     green    = bpy.data.objects.get("Cube_Green")
     blue     = bpy.data.objects.get("Cube_Blue")
@@ -153,28 +143,24 @@ def setup_red_to_green():
         print("ERROR: Missing objects:", missing)
         return False
 
-    # --- 7B: Reset hinge rotation ---
     bpy.context.scene.frame_set(F_START)
     hinge_rg.rotation_mode = 'XYZ'
     hinge_rg.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    # --- 7C: Parent Blue to Red (passive carry) ---
     if blue.parent != red:
         parent_preserve_world(blue, red)
         print("Blue parented to Red — passive carry.")
 
-    # --- 7D: Parent Red to Hinge_Red_Green ---
     if red.parent != hinge_rg:
         parent_preserve_world(red, hinge_rg)
         print("Red parented to Hinge_Red_Green.")
 
     bpy.context.view_layer.update()
 
-    # --- 7E: Create Seat_Red empty parented to Cube_Red ---
     seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
-    print(f"Seat_Red world (target): {SEAT_RED_WORLD[: ]}")
-    print(f"Seat_Red local (converted): {seat_red_local[: ]}\n")
+    print(f"Seat_Red world (target): {SEAT_RED_WORLD[:]}")
+    print(f"Seat_Red local (converted): {seat_red_local[:]}")
 
     seat_red = bpy.data.objects.new("Seat_Red", None)
     seat_red.empty_display_type = 'SPHERE'
@@ -184,10 +170,9 @@ def setup_red_to_green():
     seat_red.location = seat_red_local
     print("Seat_Red created inside Cube_Red.")
 
-    # --- 7F: Create Seat_Green empty parented to Cube_Green ---
     seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[: ]}")
-    print(f"Seat_Green local (converted): {seat_green_local[: ]}\n")
+    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
+    print(f"Seat_Green local (converted): {seat_green_local[:]}")
 
     seat_green = bpy.data.objects.new("Seat_Green", None)
     seat_green.empty_display_type = 'SPHERE'
@@ -198,9 +183,9 @@ def setup_red_to_green():
     print("Seat_Green created inside Cube_Green.")
 
     bpy.context.view_layer.update()
-    print(f"Seat_Red   world actual: {seat_red.matrix_world.translation[: ]}\nSeat_Green world actual: {seat_green.matrix_world.translation[: ]}")
+    print(f"Seat_Red   world actual: {seat_red.matrix_world.translation[:]}")
+    print(f"Seat_Green world actual: {seat_green.matrix_world.translation[:]}")
 
-    # --- 7G: Ball COPY_TRANSFORMS constraints ---
     latch_red = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_red.name = "Latch_Red"
     latch_red.target = seat_red
@@ -211,8 +196,6 @@ def setup_red_to_green():
     latch_green.target = seat_green
     print("Latch_Green created — available for reuse by C14.")
 
-    # --- 7H: Keyframe hinge rotation Y-axis (LINEAR) ---
-    # 0° → 90° → 180° hold → 180° → 90° → 0°
     key_rot_y(hinge_rg, F_START,   0)
     key_rot_y(hinge_rg, F_MID,    90)
     key_rot_y(hinge_rg, F_HOLD,  180)
@@ -221,9 +204,6 @@ def setup_red_to_green():
     key_rot_y(hinge_rg, F_END,     0)
     print("Hinge_Red_Green rotation keyed — LINEAR.")
 
-    # --- 7I: Keyframe constraint influences (CONSTANT) ---
-    # Before swap: Latch_Red=1.0, Latch_Green=0.0
-    # After swap:  Latch_Red=0.0, Latch_Green=1.0
     key_influence(ball, "Latch_Red",   F_START, 1.0)
     key_influence(ball, "Latch_Green", F_START, 0.0)
     key_influence(ball, "Latch_Red",   F_HOLD,  1.0)
@@ -234,7 +214,6 @@ def setup_red_to_green():
     key_influence(ball, "Latch_Green", F_END,   1.0)
     print("Ball influences keyed — CONSTANT.")
 
-    # --- 7J: Set frame range and reset to F_START ---
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
@@ -261,7 +240,7 @@ class LORQB_PT_C13Panel(bpy.types.Panel):
         col = layout.column(align=True)
         col.label(text="Transfer: Frame 360 → 361 @ 180°")
         col.separator()
-        col.label(text="● Blue → Red → Green → Yellow")
+        col.label(text="Blue rides Red — passive carry")
 
 class LORQB_OT_RedToGreen(bpy.types.Operator):
     bl_idname  = "lorqb.red_to_green"
@@ -293,7 +272,6 @@ def _unregister_all_lorqb():
             bpy.utils.unregister_class(cls)
         except Exception:
             pass
-
 
 def register():
     _unregister_all_lorqb()
