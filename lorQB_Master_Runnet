@@ -6,28 +6,36 @@ class LORQB_OT_RunC12(bpy.types.Operator):
     bl_idname = "lorqb.run_c12"
     bl_label  = "Run C12: Blue -> Red"
     def execute(self, context):
-        exec(open(SCRIPTS + r"\C12_blue_to_red.py").read())
+        import bpy as _bpy
+        globs = {"bpy": _bpy, "_unregister_all_lorqb": lambda: None}
+        exec(open(SCRIPTS + r"\C12_blue_to_red.py").read(), globs)
         return {'FINISHED'}
 
 class LORQB_OT_RunC13(bpy.types.Operator):
     bl_idname = "lorqb.run_c13"
     bl_label  = "Run C13: Red -> Green"
     def execute(self, context):
-        exec(open(SCRIPTS + r"\C13_red_to_green.py").read())
+        import bpy as _bpy
+        globs = {"bpy": _bpy, "_unregister_all_lorqb": lambda: None}
+        exec(open(SCRIPTS + r"\C13_red_to_green.py").read(), globs)
         return {'FINISHED'}
 
 class LORQB_OT_RunC14(bpy.types.Operator):
     bl_idname = "lorqb.run_c14"
     bl_label  = "Run C14: Green -> Yellow"
     def execute(self, context):
-        exec(open(SCRIPTS + r"\C14_green_to_yellow.py").read())
+        import bpy as _bpy
+        globs = {"bpy": _bpy, "_unregister_all_lorqb": lambda: None}
+        exec(open(SCRIPTS + r"\C14_green_to_yellow.py").read(), globs)
         return {'FINISHED'}
 
 class LORQB_OT_RunC15(bpy.types.Operator):
     bl_idname = "lorqb.run_c15"
     bl_label  = "Run C15: Yellow -> Blue"
     def execute(self, context):
-        exec(open(SCRIPTS + r"\C15_yellow_to_blue.py").read())
+        import bpy as _bpy
+        globs = {"bpy": _bpy, "_unregister_all_lorqb": lambda: None}
+        exec(open(SCRIPTS + r"\C15_yellow_to_blue.py").read(), globs)
         return {'FINISHED'}
 
 class LORQB_PT_MasterPanel(bpy.types.Panel):
