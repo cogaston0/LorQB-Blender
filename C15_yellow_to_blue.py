@@ -5,12 +5,15 @@
 # Frames 720–960 | Transfer at 840→841
 # INDEPENDENT: Places ball inside Yellow at frame 720 regardless of prior state
 # Chain: Blue — Red — Green — Yellow
-# Hinge: Hinge_Red_Green (bottom edge — X axis rotation)
+# Hinge: Hinge_Red_Green (shared edge between Red+Green)
+# ROT_AXIS = 1 (Y axis) — Green+Yellow fold toward Blue+Red
+# ROT_SIGN = -1.0 — negative Y rotation folds Green/Yellow over Blue/Red
 # Green+Yellow swing as one unit — Blue+Red stay fixed on world base
 # All movement via CHILD_OF constraints — NO direct parenting
 # FIX: SEAT_YELLOW_WORLD and SEAT_BLUE_WORLD Z corrected to 0.25 (cube center)
 # FIX: Green and Yellow forced to canonical positions before Set Inverse
 # FIX: animation_data_clear on Green and Yellow in 6F to prevent C14 key override
+# FIX: ROT_AXIS corrected to Y (index 1) — NOT X
 # ============================================================================
 import bpy
 import math
@@ -39,49 +42,74 @@ F_TRANSFER_1 = 841
 F_RET        = 900
 F_END        = 960
 
-# Hinge_Red_Green is on the BOTTOM edge — X axis rotation
-ROT_AXIS = 0
-ROT_SIGN = +1.0
+# Hinge_Red_Green shared edge between Red and Green — Y axis rotation
+# ROT_SIGN = -1.0 folds Green+Yellow toward Blue+Red (leftward / negative Y)
+# If the fold goes the wrong direction, flip ROT_SIGN to +1.0
+ROT_AXIS = 1        # Y axis
+ROT_SIGN = -1.0     # Negative Y — folds Green+Yellow over Blue+Red
 
 # Seat world positions — Z=0.25 is cube center
 SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
 SEAT_BLUE_WORLD   = mathutils.Vector(( 0.51,  0.51, 0.25))
 
-# Canonical cube positions in the 2x2 grid
+# Canonical cube positions in the 2x2 grid (from C10_scene_build / handoff)
+# Green:  bottom-left  (-0.51, -0.51, 0.25)
+# Yellow: top-left     (-0.51,  0.51, 0.25)
+# Blue:   top-right    ( 0.51,  0.51, 0.25)
+# Red:    bottom-right ( 0.51, -0.51, 0.25)
 CANONICAL_GREEN  = mathutils.Vector((-0.51, -0.51, 0.25))
 CANONICAL_YELLOW = mathutils.Vector((-0.51,  0.51, 0.25))
 
 ################################################################################
-# SECTION 2: Helper — force CONSTANT interpolation
+# SECTION 2: Helper — force CONSTANT interpolation (Blender 5 Layered Actions)
 ################################################################################
 def force_constant(obj, data_fragment):
     ad = obj.animation_data
     if not ad or not ad.action:
         return
     act = ad.action
-    for layer in act.layers:
-        for strip in layer.strips:
-            for channelbag in strip.channelbags:
-                for fc in channelbag.fcurves:
-                    if data_fragment in fc.data_path:
-                        for kp in fc.keyframe_points:
-                            kp.interpolation = 'CONSTANT'
+    try:
+        for layer in act.layers:
+            for strip in layer.strips:
+                for channelbag in strip.channelbags:
+                    for fc in channelbag.fcurves:
+                        if data_fragment in fc.data_path:
+                            for kp in fc.keyframe_points:
+                                kp.interpolation = 'CONSTANT'
+    except AttributeError:
+        # Fallback: legacy action
+        try:
+            for fc in act.fcurves:
+                if data_fragment in fc.data_path:
+                    for kp in fc.keyframe_points:
+                        kp.interpolation = 'CONSTANT'
+        except AttributeError:
+            print(f"WARNING: Could not set CONSTANT interp on {obj.name} / {data_fragment}")
 
 ################################################################################
-# SECTION 3: Helper — force LINEAR interpolation
+# SECTION 3: Helper — force LINEAR interpolation (Blender 5 Layered Actions)
 ################################################################################
 def force_linear(obj, data_fragment):
     ad = obj.animation_data
     if not ad or not ad.action:
         return
     act = ad.action
-    for layer in act.layers:
-        for strip in layer.strips:
-            for channelbag in strip.channelbags:
-                for fc in channelbag.fcurves:
-                    if data_fragment in fc.data_path:
-                        for kp in fc.keyframe_points:
-                            kp.interpolation = 'LINEAR'
+    try:
+        for layer in act.layers:
+            for strip in layer.strips:
+                for channelbag in strip.channelbags:
+                    for fc in channelbag.fcurves:
+                        if data_fragment in fc.data_path:
+                            for kp in fc.keyframe_points:
+                                kp.interpolation = 'LINEAR'
+    except AttributeError:
+        try:
+            for fc in act.fcurves:
+                if data_fragment in fc.data_path:
+                    for kp in fc.keyframe_points:
+                        kp.interpolation = 'LINEAR'
+        except AttributeError:
+            print(f"WARNING: Could not set LINEAR interp on {obj.name} / {data_fragment}")
 
 ################################################################################
 # SECTION 4: Helper — ensure CHILD_OF constraint exists
@@ -113,7 +141,7 @@ def set_inverse_via_operator(obj, constraint_name):
 # SECTION 6: Main C15 setup function
 ################################################################################
 def setup_yellow_to_blue():
-    print("=== C15 Start: Yellow → Blue ===")
+    print("=== C15 Start: Yellow -> Blue ===")
 
     # --- 6A: Validate required objects ---
     hinge  = bpy.data.objects.get(OBJ_HINGE)
@@ -158,27 +186,29 @@ def setup_yellow_to_blue():
     print("Prior constraints cleared on Ball.")
 
     # --- 6F: Clear prior parents AND animation data on Green and Yellow ---
+    # Must clear animation_data BEFORE forcing canonical positions,
+    # otherwise C14 keyed locations override the location assignment.
     for obj in [green, yellow]:
         if obj.parent:
             mw = obj.matrix_world.copy()
             obj.parent = None
             obj.matrix_world = mw
-    # Clear animation data so C14 keyed locations do not override canonical positions
     for obj in [green, yellow]:
         if obj.animation_data:
             obj.animation_data_clear()
     bpy.context.view_layer.update()
     print("Prior parents and animation data cleared on Green and Yellow.")
 
-    # --- 6G: Force canonical positions before Set Inverse ---
+    # --- 6G: Force canonical flat 2x2 grid positions before Set Inverse ---
     green.location        = CANONICAL_GREEN.copy()
     green.rotation_euler  = (0, 0, 0)
     yellow.location       = CANONICAL_YELLOW.copy()
     yellow.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
-    print(f"Cube_Green  forced to canonical: {green.matrix_world.translation[:]}")
-    print(f"Cube_Yellow forced to canonical: {yellow.matrix_world.translation[:]}")
-    print(f"Cube_Blue   actual world:        {blue.matrix_world.translation[:]}")
+    print(f"Cube_Green  forced to canonical: {green.matrix_world.translation[:]}"
+    print(f"Cube_Yellow forced to canonical: {yellow.matrix_world.translation[:]}"
+    print(f"Cube_Blue   actual world:        {blue.matrix_world.translation[:]}"
+    print(f"Cube_Red    actual world:        {red.matrix_world.translation[:]}"
     print(f"Hinge       actual world:        {hinge.matrix_world.translation[:]}\n")
 
     # --- 6H: Green CHILD_OF Hinge_Red_Green ---
@@ -187,7 +217,7 @@ def setup_yellow_to_blue():
     bpy.context.view_layer.update()
     set_inverse_via_operator(green, CON_G_HINGE)
     bpy.context.view_layer.update()
-    print(f"Green world after Set Inverse: {green.matrix_world.translation[:]}")
+    print(f"Green world after Set Inverse: {green.matrix_world.translation[:]}"
     print("Green CHILD_OF Hinge_Red_Green — Set Inverse applied.")
 
     # --- 6I: Yellow CHILD_OF Green ---
@@ -196,10 +226,10 @@ def setup_yellow_to_blue():
     bpy.context.view_layer.update()
     set_inverse_via_operator(yellow, CON_Y_GREEN)
     bpy.context.view_layer.update()
-    print(f"Yellow world after Set Inverse: {yellow.matrix_world.translation[:]}")
+    print(f"Yellow world after Set Inverse: {yellow.matrix_world.translation[:]}"
     print("Yellow CHILD_OF Green — Set Inverse applied.")
 
-    # --- 6J: Create Seat_Yellow empty inside Yellow ---
+    # --- 6J: Create Seat_Yellow empty parented to Yellow ---
     seat_yellow = bpy.data.objects.get("Seat_Yellow")
     if seat_yellow:
         bpy.data.objects.remove(seat_yellow, do_unlink=True)
@@ -212,10 +242,10 @@ def setup_yellow_to_blue():
     seat_yellow.location = seat_yellow_local
     bpy.context.view_layer.update()
     print(f"Seat_Yellow local:        {seat_yellow_local[:]}")
-    print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}")
+    print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}"
     print("Seat_Yellow created inside Cube_Yellow.")
 
-    # --- 6K: Create Seat_Blue empty inside Blue ---
+    # --- 6K: Create Seat_Blue empty parented to Blue ---
     seat_blue = bpy.data.objects.get("Seat_Blue")
     if seat_blue:
         bpy.data.objects.remove(seat_blue, do_unlink=True)
@@ -240,7 +270,7 @@ def setup_yellow_to_blue():
     bpy.context.view_layer.update()
 
     # =========================================================================
-    # Key ALL C15 constraints at frame 1 with influence=0 — scrub-safe
+    # Key ALL C15 constraints at frame F_ZERO (1) with influence=0 — scrub-safe
     # =========================================================================
     bpy.context.scene.frame_set(F_ZERO)
     bpy.context.view_layer.update()
@@ -261,7 +291,9 @@ def setup_yellow_to_blue():
 
     print(f"All C15 constraints zeroed at frame {F_ZERO}.")
 
-    # Raise influences to operational state at F_START
+    # =========================================================================
+    # Raise carry constraints to 1.0 at F_START
+    # =========================================================================
     bpy.context.scene.frame_set(F_START)
     bpy.context.view_layer.update()
 
@@ -275,7 +307,7 @@ def setup_yellow_to_blue():
 
     print(f"Green C15_Hinge and Yellow C15_Carry raised to 1.0 at frame {F_START}.")
 
-    # --- 6N: Frame F_START — ball locked to Yellow ---
+    # --- 6N: F_START — ball locked to Yellow, Set Inverse ---
     bpy.context.scene.frame_set(F_START)
     bpy.context.view_layer.update()
     con_y.influence = 1.0
@@ -287,7 +319,13 @@ def setup_yellow_to_blue():
     con_b.keyframe_insert(data_path="influence", frame=F_START)
     print(f"Ball locked to Seat_Yellow at frame {F_START}.")
 
-    # --- 6O: Keyframe hinge rotation — X-axis LINEAR ---
+    # --- 6O: Keyframe hinge rotation — Y-axis LINEAR ---
+    # ROT_AXIS=1 (Y), ROT_SIGN=-1.0 (folds Green+Yellow over Blue+Red)
+    # To flip direction if wrong: change ROT_SIGN to +1.0 at top of script
+    bpy.context.scene.frame_set(F_ZERO)
+    hinge.rotation_euler[ROT_AXIS] = 0.0
+    hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_ZERO)
+
     bpy.context.scene.frame_set(F_START)
     hinge.rotation_euler[ROT_AXIS] = ROT_SIGN * math.radians(0)
     hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_START)
@@ -313,15 +351,16 @@ def setup_yellow_to_blue():
     hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_END)
 
     force_linear(hinge, "rotation_euler")
-    print("Hinge_Red_Green rotation keyed (X-axis) — LINEAR.")
+    print(f"Hinge_Red_Green rotation keyed (Y-axis, ROT_SIGN={ROT_SIGN}) — LINEAR.")
+    print(f"  Frame {F_ZERO}:       0 deg (scrub-safe zero)")
+    print(f"  Frame {F_START}:    0 deg (flat 2x2 grid)")
+    print(f"  Frame {F_MID}:    90 deg (arm at 90 deg)")
+    print(f"  Frame {F_TRANSFER}: 180 deg (Yellow above Blue)")
+    print(f"  Frame {F_RET}:    90 deg (returning)")
+    print(f"  Frame {F_END}:    0 deg (flat again)")
 
-    # Key hinge at F_ZERO to prevent drift before F_START
-    hinge.rotation_euler[ROT_AXIS] = 0.0
-    hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_ZERO)
-    force_linear(hinge, "rotation_euler")
-    print(f"Hinge rotation zeroed at frame {F_ZERO}.")
-
-    # --- 6P: Frame F_TRANSFER — capture Blue inverse BEFORE switch ---
+    # --- 6P: F_TRANSFER — capture Blue inverse BEFORE switch ---
+    # Must be done while hinge is at 180deg so Yellow is above Blue
     bpy.context.scene.frame_set(F_TRANSFER)
     bpy.context.view_layer.update()
     con_b.influence = 1.0
@@ -329,10 +368,11 @@ def setup_yellow_to_blue():
     set_inverse_via_operator(ball, CON_BLUE)
     con_b.influence = 0.0
     bpy.context.view_layer.update()
-    print(f"Ball world at transfer frame:    {ball.matrix_world.translation[:]}")
+    print(f"Ball world at F_TRANSFER ({F_TRANSFER}): {ball.matrix_world.translation[:]}")
+    print(f"Seat_Blue world at F_TRANSFER:           {seat_blue.matrix_world.translation[:]}")
     print(f"Blue inverse_matrix captured via Set Inverse at frame {F_TRANSFER}.")
 
-    # --- 6Q: Frame F_TRANSFER_1 — switch ball to Blue ---
+    # --- 6Q: F_TRANSFER_1 — switch ball Yellow -> Blue ---
     bpy.context.scene.frame_set(F_TRANSFER_1)
     con_y.influence = 0.0
     con_b.influence = 1.0
@@ -340,12 +380,12 @@ def setup_yellow_to_blue():
     con_b.keyframe_insert(data_path="influence", frame=F_TRANSFER_1)
     print(f"Ball switched to Seat_Blue at frame {F_TRANSFER_1}.")
 
-    # --- 6R: Frame F_END — maintain Blue ownership ---
+    # --- 6R: F_END — maintain Blue ownership through end ---
     con_y.keyframe_insert(data_path="influence", frame=F_END)
     con_b.keyframe_insert(data_path="influence", frame=F_END)
     print(f"Ball remains in Seat_Blue through frame {F_END}.")
 
-    # Zero out C15_Hinge and C15_Carry at F_END
+    # Zero out carry constraints at F_END — scrub-safe after sequence
     con_g.influence = 0.0
     con_g.keyframe_insert(data_path="influence", frame=F_END)
     force_constant(green, f'constraints["{CON_G_HINGE}"].influence')
@@ -356,7 +396,7 @@ def setup_yellow_to_blue():
 
     print(f"Green C15_Hinge and Yellow C15_Carry zeroed at frame {F_END}.")
 
-    # --- 6S: Force CONSTANT interpolation on all ball influences ---
+    # --- 6S: Force CONSTANT on all ball influence curves ---
     force_constant(ball, f'constraints["{CON_YELLOW}"].influence')
     force_constant(ball, f'constraints["{CON_BLUE}"].influence')
     print("Ball influences forced CONSTANT.")
@@ -366,21 +406,22 @@ def setup_yellow_to_blue():
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
 
-    print("=== C15 Complete: Yellow → Blue ===")
-    print(f"Frames {F_START}–{F_END} | Transfer at frame {F_TRANSFER}→{F_TRANSFER_1}")
-    print(f"Hinge: {OBJ_HINGE} | Axis: X | ROT_SIGN: {ROT_SIGN}")
+    print("=== C15 Complete: Yellow -> Blue ===")
+    print(f"Frames {F_START}-{F_END} | Transfer at frame {F_TRANSFER}->{F_TRANSFER_1}")
+    print(f"Hinge: {OBJ_HINGE} | ROT_AXIS=Y({ROT_AXIS}) | ROT_SIGN={ROT_SIGN}")
     print(f"SEAT_YELLOW_WORLD: {SEAT_YELLOW_WORLD[:]}")
     print(f"SEAT_BLUE_WORLD:   {SEAT_BLUE_WORLD[:]}")
-    print("Green+Yellow swung as one unit over Red+Blue.")
-    print("Blue+Red stayed fixed on world base.")
+    print("Green+Yellow swung as one unit over Red+Blue via Y-axis rotation.")
+    print("Blue+Red stayed fixed on world base throughout.")
     print(f"All constraints zeroed at frame {F_ZERO} and frame {F_END} — scrub-safe.")
+    print("If fold direction is wrong: flip ROT_SIGN in SECTION 1 constants.")
     return True
 
 ################################################################################
 # SECTION 7: Blender UI Panel and Operator
 ################################################################################
 class LORQB_PT_C15Panel(bpy.types.Panel):
-    bl_label       = "LorQB C15: Yellow → Blue"
+    bl_label       = "LorQB C15: Yellow -> Blue"
     bl_idname      = "LORQB_PT_c15_panel"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -388,10 +429,13 @@ class LORQB_PT_C15Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.yellow_to_blue", text="Run C15: Yellow → Blue", icon="CONSTRAINT")
+        layout.operator("lorqb.yellow_to_blue", text="Run C15: Yellow -> Blue", icon="CONSTRAINT")
         col = layout.column(align=True)
-        col.label(text="Transfer: Frame 840 → 841 @ 180°")
-        col.label(text="Green+Yellow swing over — Blue+Red stay fixed")
+        col.label(text="Transfer: Frame 840 -> 841 @ 180 deg")
+        col.label(text="Hinge_Red_Green — Y axis rotation")
+        col.label(text="Green+Yellow swing over Blue+Red")
+        col.separator()
+        col.label(text="ROT_SIGN=-1.0  (flip if wrong direction)")
 
 class LORQB_OT_YellowToBlue(bpy.types.Operator):
     bl_idname  = "lorqb.yellow_to_blue"
@@ -401,7 +445,7 @@ class LORQB_OT_YellowToBlue(bpy.types.Operator):
     def execute(self, context):
         success = setup_yellow_to_blue()
         if success:
-            self.report({'INFO'}, "C15 complete: Yellow → Blue")
+            self.report({'INFO'}, "C15 complete: Yellow -> Blue")
         else:
             self.report({'ERROR'}, "C15 failed — check console")
         return {'FINISHED'}
@@ -427,6 +471,7 @@ def unregister():
 if __name__ == "__main__":
     register()
     print("\n==================================================")
-    print("✓ LorQB C15 Panel Ready.")
-    print("3D View → N-panel → LorQB → 'Run C15: Yellow → Blue'")
+    print("LorQB C15 Panel Ready.")
+    print("3D View -> N-panel -> LorQB -> 'Run C15: Yellow -> Blue'")
+    print("ROT_AXIS=Y | ROT_SIGN=-1.0 — flip sign if fold direction is wrong")
     print("==================================================\n")
