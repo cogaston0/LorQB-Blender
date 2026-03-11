@@ -1,60 +1,66 @@
-\# LorQB - Lord of the Quantum Balls
+# LorQB — Lord of the Quantum Balls
 
-\*\*Blender Version:\*\* 5.0.1  
+**Blender Version:** 5.0.1
 
-\*\*Original Design:\*\* Jose R. Velazquez © 2014  
+**Original Design:** Jose R. Velazquez © 2014
 
-\*\*Developer:\*\* Carlos  
+**Developer:** Carlos
 
-\*\*AI System:\*\* Rukmini Trio (Claude + ChatGPT + NotebookLM)
+**AI System:** Rukmini Trio (Claude + ChatGPT + NotebookLM)
 
+## File Structure
 
+```
+LorQB-Blender/
+├── C10_scene_build.py          # Scene construction — run once to build the rig
+├── C12_blue_to_red.py          # Sequence C12: ball transfer Blue → Red
+├── C13_red_to_green.py         # Sequence C13: ball transfer Red → Green
+├── C14_green_to_yellow.py      # Sequence C14: ball transfer Green → Yellow
+├── C15_yellow_to_blue.py       # Sequence C15: hinge block Yellow → Blue (WIP)
+├── lorqb_master_runner.py      # Master panel — registers all Cx operators at once
+├── lorqb_video_game.pdf        # Original game design document
+└── README.md
+```
 
-\## Project Structure
+## Cube Chain Topology
 
-scripts/
+```
+Yellow (top-left) — Green (bottom-left) — Red (bottom-right) — Blue (top-right)
+```
 
-&nbsp; construction/   -> Scene building scripts (stable, do not modify)
+Hinges (created by C10):
 
-&nbsp; animation/      -> Per-sequence animation scripts (C12, C15, etc.)
+| Hinge name          | Location       | Connects        |
+|---------------------|----------------|-----------------|
+| Hinge_Blue_Red      | ( 0.51,  0, 1) | Blue ↔ Red      |
+| Hinge_Red_Green     | ( 0, -0.51, 1) | Red ↔ Green     |
+| Hinge_Green_Yellow  | (-0.51,  0, 1) | Green ↔ Yellow  |
 
-&nbsp; diagnostic/     -> Debugging and state-check scripts
+## Script Sequence
 
-docs/
+1. **C10** — Build the scene (cubes, ball, hinges). Run once per Blender session.
+2. **C12** — Animate ball transfer: Blue → Red (frames 1–240).
+3. **C13** — Animate ball transfer: Red → Green (frames 241–480).
+4. **C14** — Animate ball transfer: Green → Yellow (frames 481–720).
+5. **C15** — Animate hinge: Yellow → Blue (frames 1–240, WIP — ball transfer pending).
 
-&nbsp; validation\_reports/  -> NotebookLM + ChatGPT verification outputs
+Use `lorqb_master_runner.py` to register all four Cx operator buttons in one panel
+(N-panel → LorQB tab). Update the `SCRIPTS` path at the top of that file to match
+your local scripts folder.
 
-&nbsp; sequence\_logs/       -> Per-sequence progress notes
+## Level 1 Status
 
+- Goal: complete all sequences for Level 1 with modular, reorderable scripts.
+- Current focus: C15 (Yellow → Blue) — hinge rotation confirmed, ball transfer pending.
 
+## Key Design Notes
 
-\## Cube Chain Topology
+- Ball starts inside the active cube at the beginning of each turn.
+- Each Cx script calls `reset_scene_to_canonical()` (or an equivalent reset) first,
+  so any script can be run independently without depending on a prior run.
+- Future: shuffle can select any cube order; scripts must support any permutation.
 
-Yellow — Green — Red — Blue (snake chain, hinged on top)
+## Key Rules
 
-
-
-\## Level 1 Status
-
-\- Goal: complete all sequences for Level 1 with modular, reorderable scripts.
-
-\- Current focus: C15 (Yellow -> Blue).
-
-
-
-\## Key Design Notes
-
-\- Ball starts outside the cubes at the beginning of each turn.
-
-\- Current dev order: Blue -> Red -> Green -> Yellow (temporary).
-
-\- Future: shuffle can select any cube order; scripts must support any permutation.
-
-
-
-\## Key Rules
-
-\- Script-only operations (no manual Blender UI)
-
-\- Commit after every confirmed working step
-
+- Script-only operations (no manual Blender UI).
+- Commit after every confirmed working step.
