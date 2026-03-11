@@ -1,139 +1,185 @@
 # ============================================================================
-# 5lorqb_yellow_to_blue_C15.py  (Blender 5.0.1)
-# ----------------------------------------------------------------------------
-# LorQB Level 1 — Sequence C15 (Yellow -> Blue)
-# Hinge: Hinge_Red_Green
-# Axis: Y
-#
-# This script matches the *structure* of your C12/C13/C14 scripts:
-# - Creates a LorQB UI tab + button
-# - Runs a single operator that builds the C15 hinge rotation keys
-# - Forces CONSTANT interpolation via Blender 5 Action API
-#
-# NOTE: This is the **C15 hinge-rotation block only** (the same way C12 started).
-# Ball/seat/latch transfer block gets added after the hinge snaps correctly.
+# C15_yellow_to_blue.py  (Blender 5.0.1)
+# C15 — Yellow → Blue
+# Frames 1 – 240 | Hinge snaps at frame 120
+# Chain: Blue — Red — Green — Yellow
+# Hinge: Hinge_Red_Green (Y-axis rotation, CONSTANT interpolation)
+# NOTE: Hinge-rotation block — ball/seat/latch transfer to be added.
+# Architecture: matches C12/C13/C14 reference standard
 # ============================================================================
 
 import bpy
 import math
 
-# ----------------------------------------------------------------------------
-# UI / IDs
-# ----------------------------------------------------------------------------
-ADDON_NAME   = "LorQB"
-TAB_NAME     = "LorQB"
-PANEL_LABEL  = "LorQB Animation"
-PANEL_ID     = "LORQB_PT_animation_panel"
-OP_ID        = "lorqb.c15_yellow_to_blue"
-OP_LABEL     = "Run C15: Yellow -> Blue (Hinge_Red_Green)"
+################################################################################
+# SECTION 1: Constants
+################################################################################
+F_START  = 1
+F_MID    = 120
+F_END    = 240
 
-# ----------------------------------------------------------------------------
-# REQUIRED OBJECT NAMES (MATCH YOUR FILE)
-# ----------------------------------------------------------------------------
-REQ = [
-    "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
-    "Ball",
-    "Hinge_Red_Green", "Hinge_Green_Yellow", "Hinge_Blue_Red",
-]
+ROT_AXIS = 1    # Y-axis index in rotation_euler
 
-# ----------------------------------------------------------------------------
-# HELPERS
-# ----------------------------------------------------------------------------
-def require_objects():
-    missing = [n for n in REQ if bpy.data.objects.get(n) is None]
+################################################################################
+# SECTION 2: RESET — Clear Hinge_Red_Green animation and ball state
+################################################################################
+def reset_c15_state():
+    hinge = bpy.data.objects.get("Hinge_Red_Green")
+    if hinge and hinge.animation_data:
+        hinge.animation_data_clear()
+    ball = bpy.data.objects.get("Ball")
+    if ball:
+        ball.constraints.clear()
+    bpy.context.view_layer.update()
+    print("=== C15 state reset (Hinge_Red_Green + ball only) ===")
+
+################################################################################
+# SECTION 3: Helper — set interpolation on a specific keyframe by frame number
+################################################################################
+def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
+    if not obj.animation_data or not obj.animation_data.action:
+        return
+    action = obj.animation_data.action
+    try:
+        fcurves = action.fcurves
+    except AttributeError:
+        try:
+            fcurves = action.layers[0].strips[0].channelbag_for_slot(
+                action.slots[0]
+            ).fcurves
+        except Exception:
+            print(f"WARNING: Could not access fcurves for {obj.name} — skipping interpolation set")
+            return
+    for fc in fcurves:
+        if fc.data_path == data_path or data_path in fc.data_path:
+            for kp in fc.keyframe_points:
+                if abs(kp.co[0] - frame) < 0.5:
+                    kp.interpolation = interp
+
+################################################################################
+# SECTION 4: Helper — key Y-axis rotation with CONSTANT interpolation (snap)
+################################################################################
+def key_rot_y_constant(obj, frame, degrees):
+    bpy.context.scene.frame_set(frame)
+    obj.rotation_mode = 'XYZ'
+    obj.rotation_euler[ROT_AXIS] = math.radians(degrees)
+    obj.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=frame)
+    set_last_keyframe_interpolation(obj, "rotation_euler", frame, 'CONSTANT')
+
+################################################################################
+# SECTION 5: (Reserved — constraint-influence helpers not yet needed)
+################################################################################
+
+################################################################################
+# SECTION 6: (Reserved — parent helper not yet needed)
+################################################################################
+
+################################################################################
+# SECTION 7: Main C15 setup function
+################################################################################
+def setup_yellow_to_blue():
+    print("=== C15 Start: Yellow → Blue ===")
+
+    reset_c15_state()
+
+    req = [
+        "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+        "Ball",
+        "Hinge_Red_Green", "Hinge_Green_Yellow", "Hinge_Blue_Red",
+    ]
+    missing = [n for n in req if bpy.data.objects.get(n) is None]
     if missing:
-        raise RuntimeError("Missing objects: " + ", ".join(missing))
+        print("ERROR: Missing objects:", missing)
+        return False
 
-def clear_object_animation(obj: bpy.types.Object):
-    if obj.animation_data:
-        obj.animation_data_clear()
-
-def force_constant_rotation_euler(obj: bpy.types.Object):
-    """
-    Blender 5.0.1 in your build:
-    - Action has NO .fcurves
-    - Use action.fcurve_ensure_for_datablock(..., index=)
-    """
-    ad = obj.animation_data
-    if not ad or not ad.action:
-        raise RuntimeError(f"No action found on {obj.name} after inserting keys.")
-
-    act = ad.action
-
-    # rotation_euler has 3 components: X=0, Y=1, Z=2
-    for i in (0, 1, 2):
-        fc = act.fcurve_ensure_for_datablock(obj, "rotation_euler", index=i)
-        for kp in fc.keyframe_points:
-            kp.interpolation = "CONSTANT"
-
-def key_hinge_red_green_C15():
-    require_objects()
-
-    hinge = bpy.data.objects["Hinge_Red_Green"]
-    scene = bpy.context.scene
-
-    # wipe prior animation so we don't “stack” rotations
-    clear_object_animation(hinge)
-
-    hinge.rotation_mode = "XYZ"
-
-    # f1 = 0
-    scene.frame_set(1)
+    hinge = bpy.data.objects.get("Hinge_Red_Green")
+    bpy.context.scene.frame_set(F_START)
+    hinge.rotation_mode = 'XYZ'
     hinge.rotation_euler = (0.0, 0.0, 0.0)
-    hinge.keyframe_insert(data_path="rotation_euler")
+    bpy.context.view_layer.update()
 
-    # f120 = 180 on Y
-    scene.frame_set(120)
-    hinge.rotation_euler = (0.0, math.radians(180.0), 0.0)
-    hinge.keyframe_insert(data_path="rotation_euler")
+    key_rot_y_constant(hinge, F_START,   0)
+    key_rot_y_constant(hinge, F_MID,   180)
+    key_rot_y_constant(hinge, F_END,     0)
+    print("Hinge_Red_Green rotation keyed — CONSTANT (snap).")
 
-    # f240 = 0
-    scene.frame_set(240)
-    hinge.rotation_euler = (0.0, 0.0, 0.0)
-    hinge.keyframe_insert(data_path="rotation_euler")
+    bpy.context.scene.frame_start = F_START
+    bpy.context.scene.frame_end   = F_END
+    bpy.context.scene.frame_set(F_START)
 
-    # force snap
-    force_constant_rotation_euler(hinge)
+    print("=== C15 Complete: Yellow → Blue ===")
+    print(f"Frames {F_START}–{F_END} | Hinge snaps at frame {F_MID}")
+    print("Axis: Y | Hinge: Hinge_Red_Green | Interpolation: CONSTANT")
+    print("NOTE: Ball/seat/latch transfer block to be added in next iteration.")
+    return True
 
-    print("C15 OK: Hinge_Red_Green keyed (Y: 0 -> 180 -> 0) with CONSTANT interpolation.")
-
-# ----------------------------------------------------------------------------
-# OPERATOR + PANEL (THIS IS WHY YOU DIDN'T SEE A LorQB TAB BEFORE)
-# ----------------------------------------------------------------------------
-class LORQB_OT_c15_yellow_to_blue(bpy.types.Operator):
-    bl_idname = OP_ID
-    bl_label = OP_LABEL
-
-    def execute(self, context):
-        key_hinge_red_green_C15()
-        return {'FINISHED'}
-
-class LORQB_PT_animation_panel(bpy.types.Panel):
-    bl_label = PANEL_LABEL
-    bl_idname = PANEL_ID
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category = TAB_NAME
+################################################################################
+# SECTION 8: Blender UI Panel and Operator
+################################################################################
+class LORQB_PT_C15Panel(bpy.types.Panel):
+    bl_label       = "LorQB C15: Yellow → Blue"
+    bl_idname      = "LORQB_PT_c15_panel"
+    bl_space_type  = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category    = 'LorQB'
 
     def draw(self, context):
         layout = self.layout
-        layout.operator(OP_ID, text=OP_LABEL)
+        layout.operator("lorqb.yellow_to_blue", text="Run C15: Yellow → Blue", icon="CONSTRAINT")
+        col = layout.column(align=True)
+        col.label(text="Hinge_Red_Green: Y snap at frame 120")
+        col.separator()
+        col.label(text="● Blue → Red → Green → Yellow → Blue")
 
-# ----------------------------------------------------------------------------
-# REGISTER
-# ----------------------------------------------------------------------------
-classes = (
-    LORQB_OT_c15_yellow_to_blue,
-    LORQB_PT_animation_panel,
-)
+class LORQB_OT_YellowToBlue(bpy.types.Operator):
+    bl_idname  = "lorqb.yellow_to_blue"
+    bl_label   = "Yellow to Blue C15"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        success = setup_yellow_to_blue()
+        if success:
+            self.report({'INFO'}, "C15 complete: Yellow → Blue")
+        else:
+            self.report({'ERROR'}, "C15 failed — check console")
+        return {'FINISHED'}
+
+################################################################################
+# SECTION 9: Register / Unregister
+################################################################################
+def _unregister_all_lorqb():
+    to_remove = []
+    for name in dir(bpy.types):
+        cls = getattr(bpy.types, name, None)
+        if cls is None:
+            continue
+        bl_idname = getattr(cls, "bl_idname", "") or ""
+        if "lorqb" in bl_idname.lower():
+            to_remove.append(cls)
+    for cls in to_remove:
+        try:
+            bpy.utils.unregister_class(cls)
+        except Exception:
+            pass
 
 def register():
-    for c in classes:
-        bpy.utils.register_class(c)
+    _unregister_all_lorqb()
+    bpy.utils.register_class(LORQB_PT_C15Panel)
+    bpy.utils.register_class(LORQB_OT_YellowToBlue)
+    print("\n" + "=" * 50)
+    print("✓ LorQB C15 Panel Ready.")
+    print("3D View → N-panel → LorQB → 'Run C15: Yellow → Blue'")
+    print("=" * 50 + "\n")
 
 def unregister():
-    for c in reversed(classes):
-        bpy.utils.unregister_class(c)
+    try:
+        bpy.utils.unregister_class(LORQB_OT_YellowToBlue)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(LORQB_PT_C15Panel)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     try:

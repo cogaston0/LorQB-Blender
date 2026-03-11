@@ -1,5 +1,13 @@
+# ============================================================================
+# lorqb_master_runner.py  (Blender 5.0.1)
+# LorQB Master Runner — launches individual Cx animation scripts from one panel
+# Load this script in Blender's Text Editor and run it to register the panel.
+# Update SCRIPTS to point to the folder containing the Cx script files.
+# ============================================================================
+
 import bpy
 
+# *** UPDATE THIS PATH to the folder on your machine that contains C12–C15 scripts ***
 SCRIPTS = r"C:\rukmini_ai_loop\scripts"
 
 class LORQB_OT_RunC12(bpy.types.Operator):

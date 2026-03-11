@@ -1,3 +1,11 @@
+# ============================================================================
+# C10_scene_build.py  (Blender 5.0.1)
+# C10 — Scene Build
+# Constructs the four hollow cubes (Blue, Red, Green, Yellow),
+# the ball, and the three hinge empties for the LorQB Level 1 rig.
+# Run this script once before running any Cx animation scripts.
+# ============================================================================
+
 import bpy
 
 ################################################################################
