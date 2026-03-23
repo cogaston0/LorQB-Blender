@@ -1,6 +1,6 @@
 \# LorQB - Lord of the Quantum Balls
 
-\*\*Blender Version:\*\* 5.0.1  
+\*\*Blender Version:\*\* 5.1.0 
 
 \*\*Original Design:\*\* Jose R. Velazquez © 2014  
 
