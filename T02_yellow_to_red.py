@@ -274,6 +274,17 @@ def run_animation():
 # SECTION 5: N-Panel UI
 ###############################################################################
 
+class LORQB_OT_reset_t2(bpy.types.Operator):
+    bl_idname      = "lorqb.reset_t2"
+    bl_label       = "Reset to Base"
+    bl_description = "Reset all objects to canonical state"
+
+    def execute(self, context):
+        reset_scene_to_canonical()
+        self.report({'INFO'}, "T2 reset to base")
+        return {'FINISHED'}
+
+
 class LORQB_OT_run_t2(bpy.types.Operator):
     bl_idname      = "lorqb.run_t2"
     bl_label       = "Run T2: Yellow → Red"
@@ -297,11 +308,12 @@ class LORQB_PT_t2_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="T2: Yellow → Red")
-        layout.operator("lorqb.run_t2", icon='PLAY')
+        layout.operator("lorqb.reset_t2", text="Reset to Base", icon='LOOP_BACK')
+        layout.separator()
+        layout.operator("lorqb.run_t2", text="Run T2: Yellow → Red", icon='PLAY')
 
 
-_classes = [LORQB_OT_run_t2, LORQB_PT_t2_panel]
+_classes = [LORQB_OT_reset_t2, LORQB_OT_run_t2, LORQB_PT_t2_panel]
 
 def register():
     for cls in _classes:

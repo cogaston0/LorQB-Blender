@@ -250,6 +250,16 @@ def setup_blue_to_red():
 ################################################################################
 # SECTION 8: Blender UI Panel and Operator
 ################################################################################
+class LORQB_OT_ResetC12(bpy.types.Operator):
+    bl_idname  = "lorqb.reset_c12"
+    bl_label   = "Reset to Base"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        reset_scene_to_canonical()
+        self.report({'INFO'}, "Reset to base complete")
+        return {'FINISHED'}
+
 class LORQB_PT_C12Panel(bpy.types.Panel):
     bl_label       = "LorQB C12: Blue → Red"
     bl_idname      = "LORQB_PT_c12_panel"
@@ -259,6 +269,8 @@ class LORQB_PT_C12Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.operator("lorqb.reset_c12", text="Reset to Base", icon='LOOP_BACK')
+        layout.separator()
         layout.operator("lorqb.blue_to_red", text="Run C12: Blue → Red", icon="CONSTRAINT")
         col = layout.column(align=True)
         col.label(text="Transfer: Frame 120 → 121 @ 180°")
@@ -298,6 +310,7 @@ def _unregister_all_lorqb():
 
 def register():
     _unregister_all_lorqb()
+    bpy.utils.register_class(LORQB_OT_ResetC12)
     bpy.utils.register_class(LORQB_PT_C12Panel)
     bpy.utils.register_class(LORQB_OT_BlueToRed)
     print("\n" + "=" * 50)
@@ -312,6 +325,10 @@ def unregister():
         pass
     try:
         bpy.utils.unregister_class(LORQB_PT_C12Panel)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(LORQB_OT_ResetC12)
     except Exception:
         pass
 

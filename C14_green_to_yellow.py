@@ -39,15 +39,36 @@ def reset_c14_state():
     hinge = bpy.data.objects.get("Hinge_Green_Yellow")
     if hinge and hinge.animation_data:
         hinge.animation_data_clear()
+
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
+
     for seat_name in ["Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
+
+    # Zero hinge rotation (animation_data_clear freezes it at current angle)
+    if hinge:
+        hinge.rotation_mode  = 'XYZ'
+        hinge.rotation_euler = (0.0, 0.0, 0.0)
+
     bpy.context.view_layer.update()
-    print("=== C14 state reset (Hinge_Green_Yellow + ball only) ===")
+
+    # Unparent Green and restore canonical position
+    green = bpy.data.objects.get("Cube_Green")
+    if green:
+        if green.animation_data:
+            green.animation_data_clear()
+        green.parent = None
+        bpy.context.view_layer.update()
+        green.location       = (-0.51, 0.0, 1.0)
+        green.rotation_mode  = 'XYZ'
+        green.rotation_euler = (0.0, 0.0, 0.0)
+
+    bpy.context.view_layer.update()
+    print("=== C14 reset: hinge zeroed, Green unparented and repositioned ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -211,6 +232,16 @@ def setup_green_to_yellow():
 ################################################################################
 # SECTION 8: Blender UI Panel and Operator
 ################################################################################
+class LORQB_OT_ResetC14(bpy.types.Operator):
+    bl_idname  = "lorqb.reset_c14"
+    bl_label   = "Reset to Base"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        reset_c14_state()
+        self.report({'INFO'}, "Reset to base complete")
+        return {'FINISHED'}
+
 class LORQB_PT_C14Panel(bpy.types.Panel):
     bl_label       = "LorQB C14: Green → Yellow"
     bl_idname      = "LORQB_PT_c14_panel"
@@ -220,6 +251,8 @@ class LORQB_PT_C14Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.operator("lorqb.reset_c14", text="Reset to Base", icon='LOOP_BACK')
+        layout.separator()
         layout.operator("lorqb.green_to_yellow", text="Run C14: Green → Yellow", icon="CONSTRAINT")
         col = layout.column(align=True)
         col.label(text="Transfer: Frame 600 → 601 @ 180°")
@@ -260,6 +293,7 @@ def _unregister_all_lorqb():
 
 def register():
     _unregister_all_lorqb()
+    bpy.utils.register_class(LORQB_OT_ResetC14)
     bpy.utils.register_class(LORQB_PT_C14Panel)
     bpy.utils.register_class(LORQB_OT_GreenToYellow)
     print("\n" + "=" * 50)
@@ -274,6 +308,10 @@ def unregister():
         pass
     try:
         bpy.utils.unregister_class(LORQB_PT_C14Panel)
+    except Exception:
+        pass
+    try:
+        bpy.utils.unregister_class(LORQB_OT_ResetC14)
     except Exception:
         pass
 
