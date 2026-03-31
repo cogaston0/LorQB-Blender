@@ -1,5 +1,5 @@
 # ============================================================================
-# T03_red_to_yellow.py  (Blender 5.1.0)
+# T03_red_to_yellow.py  (Blender 5.0.1)
 # T3 — Red → Yellow
 #
 # Three moves, no detachment:
@@ -117,8 +117,17 @@ def reset_scene_to_canonical():
 def _fcurves(obj):
     if not obj.animation_data or not obj.animation_data.action:
         return []
+    act = obj.animation_data.action
     try:
-        return obj.animation_data.action.layers[0].strips[0].channelbags[0].fcurves
+        return act.fcurves
+    except AttributeError:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
+    except Exception:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbags[0].fcurves
     except Exception:
         return []
 

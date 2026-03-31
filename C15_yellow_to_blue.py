@@ -61,8 +61,11 @@ def reset_scene_to_canonical():
     for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
         hinge = bpy.data.objects.get(hinge_name)
         if hinge:
-            hinge.rotation_mode = 'XYZ'
+            hinge.rotation_mode  = 'XYZ'
             hinge.rotation_euler = (0.0, 0.0, 0.0)
+
+    # Flush depsgraph before clearing parents so world transforms are stable
+    bpy.context.view_layer.update()
 
     for cube_name in ["Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow"]:
         cube = bpy.data.objects.get(cube_name)
@@ -77,7 +80,26 @@ def reset_scene_to_canonical():
             bpy.data.objects.remove(seat, do_unlink=True)
 
     bpy.context.view_layer.update()
-    print("=== Scene reset to canonical state ===")
+
+    # Restore canonical world positions — required when coming from C14
+    canonical = {
+        "Cube_Blue":          ( 0.51,  0.0,  1.0),
+        "Cube_Red":           ( 0.0,  -0.51, 1.0),
+        "Cube_Green":         (-0.51,  0.0,  1.0),
+        "Cube_Yellow":        (-0.51,  0.0,  1.0),
+        "Hinge_Blue_Red":     ( 0.51,  0.0,  1.0),
+        "Hinge_Red_Green":    ( 0.0,  -0.51, 1.0),
+        "Hinge_Green_Yellow": (-0.51,  0.0,  1.0),
+    }
+    for name, loc in canonical.items():
+        obj = bpy.data.objects.get(name)
+        if obj:
+            obj.location       = loc
+            obj.rotation_mode  = 'XYZ'
+            obj.rotation_euler = (0.0, 0.0, 0.0)
+
+    bpy.context.view_layer.update()
+    print("=== C15 reset: canonical positions restored ===")
 
 ################################################################################
 # SECTION 3: Helper — force CONSTANT interpolation
@@ -322,6 +344,16 @@ def setup_yellow_to_blue():
 ################################################################################
 # SECTION 9: Blender UI Panel and Operator
 ################################################################################
+class LORQB_OT_ResetC15(bpy.types.Operator):
+    bl_idname  = "lorqb.reset_c15"
+    bl_label   = "Reset to Base"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        reset_scene_to_canonical()
+        self.report({'INFO'}, "Reset to base complete")
+        return {'FINISHED'}
+
 class LORQB_PT_C15Panel(bpy.types.Panel):
     bl_label       = "LorQB C15: Yellow → Blue"
     bl_idname      = "LORQB_PT_c15_panel"
@@ -331,6 +363,8 @@ class LORQB_PT_C15Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.operator("lorqb.reset_c15", text="Reset to Base", icon='LOOP_BACK')
+        layout.separator()
         layout.operator("lorqb.yellow_to_blue", text="Run C15: Yellow → Blue", icon="CONSTRAINT")
         col = layout.column(align=True)
         col.label(text="Transfer: Frame 840 → 841 @ 180°")
@@ -353,7 +387,7 @@ class LORQB_OT_YellowToBlue(bpy.types.Operator):
 # SECTION 10: Register / Unregister
 ################################################################################
 def register():
-    for cls in [LORQB_PT_C15Panel, LORQB_OT_YellowToBlue]:
+    for cls in [LORQB_OT_ResetC15, LORQB_PT_C15Panel, LORQB_OT_YellowToBlue]:
         try:
             bpy.utils.unregister_class(cls)
         except Exception:
@@ -361,7 +395,7 @@ def register():
         bpy.utils.register_class(cls)
 
 def unregister():
-    for cls in [LORQB_OT_YellowToBlue, LORQB_PT_C15Panel]:
+    for cls in [LORQB_OT_YellowToBlue, LORQB_PT_C15Panel, LORQB_OT_ResetC15]:
         try:
             bpy.utils.unregister_class(cls)
         except Exception:
