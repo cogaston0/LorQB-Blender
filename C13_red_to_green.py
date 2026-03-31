@@ -252,6 +252,7 @@ class LORQB_PT_C13Panel(bpy.types.Panel):
         col = layout.column(align=True)
         col.label(text="Transfer: Frame 360 → 361 @ 180°")
         col.separator()
+        col.label(text="● Blue → Red → Green → Yellow")
         col.label(text="Blue rides Red — passive carry")
 
 class LORQB_OT_RedToGreen(bpy.types.Operator):

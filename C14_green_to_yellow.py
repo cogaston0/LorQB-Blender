@@ -31,44 +31,41 @@ SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.25))
 SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
 
 ################################################################################
-# SECTION 2: RESET — Clear only Hinge_Green_Yellow and ball state.
-# Blue, Red, Hinge_Blue_Red, Hinge_Red_Green are NOT touched —
-# they ride passively as part of the physical rig attached to Green.
+# SECTION 2: RESET — Full scene reset to canonical state
+# Every C script must call this first. No script depends on any other.
+# NOTE: Blue/Red passive-carry parenting (inherited from scene hierarchy or a
+# prior C13 run) is preserved intentionally — reset clears animation only,
+# not cube-parent relationships, consistent with C12/C13 standard.
 ################################################################################
-def reset_c14_state():
-    hinge = bpy.data.objects.get("Hinge_Green_Yellow")
-    if hinge and hinge.animation_data:
-        hinge.animation_data_clear()
+def reset_scene_to_canonical():
+    all_names = [
+        "Ball",
+        "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+        "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
+    ]
+
+    for name in all_names:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.animation_data:
+            obj.animation_data_clear()
 
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
-    for seat_name in ["Seat_Green", "Seat_Yellow"]:
+    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        hinge = bpy.data.objects.get(hinge_name)
+        if hinge:
+            hinge.rotation_mode = 'XYZ'
+            hinge.rotation_euler = (0.0, 0.0, 0.0)
+
+    for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
 
-    # Zero hinge rotation (animation_data_clear freezes it at current angle)
-    if hinge:
-        hinge.rotation_mode  = 'XYZ'
-        hinge.rotation_euler = (0.0, 0.0, 0.0)
-
     bpy.context.view_layer.update()
-
-    # Unparent Green and restore canonical position
-    green = bpy.data.objects.get("Cube_Green")
-    if green:
-        if green.animation_data:
-            green.animation_data_clear()
-        green.parent = None
-        bpy.context.view_layer.update()
-        green.location       = (-0.51, 0.0, 1.0)
-        green.rotation_mode  = 'XYZ'
-        green.rotation_euler = (0.0, 0.0, 0.0)
-
-    bpy.context.view_layer.update()
-    print("=== C14 reset: hinge zeroed, Green unparented and repositioned ===")
+    print("=== Scene reset to canonical state ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -132,7 +129,7 @@ def parent_preserve_world(child, new_parent):
 def setup_green_to_yellow():
     print("=== C14 Start: Green → Yellow ===")
 
-    reset_c14_state()
+    reset_scene_to_canonical()
 
     green  = bpy.data.objects.get("Cube_Green")
     yellow = bpy.data.objects.get("Cube_Yellow")
@@ -238,7 +235,7 @@ class LORQB_OT_ResetC14(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        reset_c14_state()
+        reset_scene_to_canonical()
         self.report({'INFO'}, "Reset to base complete")
         return {'FINISHED'}
 
