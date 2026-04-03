@@ -349,40 +349,40 @@ def run_animation():
 ###############################################################################
 
 class LORQB_OT_reset_t4(bpy.types.Operator):
-    bl_idname      = "lorqb.reset_t4"
+    bl_idname      = "lorqb.reset_t04"
     bl_label       = "Reset to Base"
     bl_description = "Reset all objects to canonical state"
 
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "T4 reset to base")
+        self.report({'INFO'}, "T04 reset to base")
         return {'FINISHED'}
 
 class LORQB_OT_run_t4(bpy.types.Operator):
-    bl_idname      = "lorqb.run_t4"
-    bl_label       = "Run T4: Green → Blue"
-    bl_description = "Arm T4: HRG first, then HBR, ball drops Green→Blue"
+    bl_idname      = "lorqb.run_t04"
+    bl_label       = "Run T04: Green → Blue"
+    bl_description = "Arm T04: HRG first, then HBR, ball drops Green→Blue"
 
     def execute(self, context):
         result = run_animation()
         if result:
-            self.report({'INFO'}, "T4 armed — press Play to run")
+            self.report({'INFO'}, "T04 armed — press Play to run")
         else:
-            self.report({'ERROR'}, "T4 failed — check console")
+            self.report({'ERROR'}, "T04 failed — check console")
         return {'FINISHED'}
 
 class LORQB_PT_t4_panel(bpy.types.Panel):
-    bl_label       = "LorQB — T4"
-    bl_idname      = "LORQB_PT_t4_panel"
+    bl_label       = "LorQB — T04: Green → Blue"
+    bl_idname      = "LORQB_PT_t04_panel"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = "LorQB"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.reset_t4", text="Reset to Base",        icon='LOOP_BACK')
+        layout.operator("lorqb.reset_t04", text="Reset to Base",        icon='LOOP_BACK')
         layout.separator()
-        layout.operator("lorqb.run_t4",   text="Run T4: Green → Blue", icon='PLAY')
+        layout.operator("lorqb.run_t04",   text="Run T04: Green → Blue", icon='PLAY')
 
 _classes = [LORQB_OT_reset_t4, LORQB_OT_run_t4, LORQB_PT_t4_panel]
 
@@ -391,7 +391,11 @@ _classes = [LORQB_OT_reset_t4, LORQB_OT_run_t4, LORQB_PT_t4_panel]
 ###############################################################################
 
 def register():
-    for name in ["LORQB_PT_t4_panel", "LORQB_OT_run_t4", "LORQB_OT_reset_t4"]:
+    # Note: operator lookups use Python class names (LORQB_OT_*), not bl_idnames.
+    # Python class names are unchanged; only bl_idnames were updated to zero-padded form.
+    # LORQB_PT_t4_panel is the old panel bl_idname included for migration from prior runs.
+    for name in ["LORQB_PT_t04_panel", "LORQB_OT_run_t4", "LORQB_OT_reset_t4",
+                 "LORQB_PT_t4_panel"]:
         cls = getattr(bpy.types, name, None)
         if cls:
             try:

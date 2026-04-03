@@ -100,7 +100,7 @@ def reset_scene_to_canonical():
             bpy.data.objects.remove(obj, do_unlink=True)
 
     bpy.context.view_layer.update()
-    print("=== T1 reset to canonical ===")
+    print("=== T01 reset to canonical ===")
 
 ###############################################################################
 # SECTION 3: Helpers
@@ -109,8 +109,17 @@ def reset_scene_to_canonical():
 def _fcurves(obj):
     if not obj.animation_data or not obj.animation_data.action:
         return []
+    act = obj.animation_data.action
     try:
-        return obj.animation_data.action.layers[0].strips[0].channelbags[0].fcurves
+        return act.fcurves
+    except AttributeError:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
+    except Exception:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbags[0].fcurves
     except Exception:
         return []
 
@@ -276,40 +285,40 @@ def run_animation():
 ###############################################################################
 
 class LORQB_OT_reset_t1(bpy.types.Operator):
-    bl_idname      = "lorqb.reset_t1"
+    bl_idname      = "lorqb.reset_t01"
     bl_label       = "Reset to Base"
     bl_description = "Reset all objects to canonical state"
 
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "T1 reset to base")
+        self.report({'INFO'}, "T01 reset to base")
         return {'FINISHED'}
 
 class LORQB_OT_run_t1(bpy.types.Operator):
-    bl_idname      = "lorqb.run_t1"
-    bl_label       = "Run T1: Blue → Green"
-    bl_description = "Arm T1 animation: Blue transfers ball to Green"
+    bl_idname      = "lorqb.run_t01"
+    bl_label       = "Run T01: Blue → Green"
+    bl_description = "Arm T01 animation: Blue transfers ball to Green"
 
     def execute(self, context):
         result = run_animation()
         if result:
-            self.report({'INFO'}, "T1 armed — press Play to run")
+            self.report({'INFO'}, "T01 armed — press Play to run")
         else:
-            self.report({'ERROR'}, "T1 failed — check console")
+            self.report({'ERROR'}, "T01 failed — check console")
         return {'FINISHED'}
 
 class LORQB_PT_t1_panel(bpy.types.Panel):
-    bl_label       = "LorQB — T1"
-    bl_idname      = "LORQB_PT_t1_panel"
+    bl_label       = "LorQB — T01: Blue → Green"
+    bl_idname      = "LORQB_PT_t01_panel"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = "LorQB"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.reset_t1", text="Reset to Base", icon='LOOP_BACK')
+        layout.operator("lorqb.reset_t01", text="Reset to Base", icon='LOOP_BACK')
         layout.separator()
-        layout.operator("lorqb.run_t1",   text="Run T1: Blue → Green", icon='PLAY')
+        layout.operator("lorqb.run_t01",   text="Run T01: Blue → Green", icon='PLAY')
 
 _classes = [LORQB_OT_reset_t1, LORQB_OT_run_t1, LORQB_PT_t1_panel]
 
@@ -318,7 +327,11 @@ _classes = [LORQB_OT_reset_t1, LORQB_OT_run_t1, LORQB_PT_t1_panel]
 ###############################################################################
 
 def register():
-    for name in ["LORQB_PT_t1_panel", "LORQB_OT_run_t1", "LORQB_OT_reset_t1"]:
+    # Note: operator lookups use Python class names (LORQB_OT_*), not bl_idnames.
+    # Python class names are unchanged; only bl_idnames were updated to zero-padded form.
+    # LORQB_PT_t1_panel is the old panel bl_idname included for migration from prior runs.
+    for name in ["LORQB_PT_t01_panel", "LORQB_OT_run_t1", "LORQB_OT_reset_t1",
+                 "LORQB_PT_t1_panel"]:
         cls = getattr(bpy.types, name, None)
         if cls:
             try:

@@ -4,21 +4,22 @@
 # What it does:
 #   1. Loads all C and T scripts from disk (linked as external files)
 #      → After this, Blender shows "Text is newer on disk — Reload" when files change.
-#   2. Executes T01, T02, T03 to register their panels immediately.
-#      → All three T panels appear in the LorQB N-panel tab right away.
+#   2. Executes T01, T02, T03, T04 to register their panels immediately.
+#      → All four T panels appear in the LorQB N-panel tab right away.
 #   3. C10–C15 are loaded but NOT auto-executed.
 #      → Run each C script manually (Alt+P or its panel button) when needed.
 
 import bpy
 import os
 
-SCRIPTS_DIR = r"C:\rukmini_ai_loop\scripts"
+SCRIPTS_DIR = os.path.dirname(bpy.data.filepath)
 
 # Load + execute: T scripts coexist safely (each only unregisters its own class)
 EXECUTE = [
     "T01_blue_to_green.py",
     "T02_yellow_to_red.py",
     "T03_red_to_yellow.py",
+    "T04_green_to_blue.py",
 ]
 
 # Load only: C scripts use _unregister_all_lorqb() which removes all panels
@@ -56,5 +57,5 @@ for filename in EXECUTE:
     print(f"  Registered: {filename}")
 
 print("\n=== Done ===")
-print("T01 / T02 / T03 panels active in LorQB N-panel tab.")
+print("T01 / T02 / T03 / T04 panels active in LorQB N-panel tab.")
 print("To activate a C script panel: open it in Text Editor → Alt+P.")

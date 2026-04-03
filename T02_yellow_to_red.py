@@ -27,8 +27,8 @@ F_RET1_END     = 200   # Hinge_Red_Green returns 90°→0° FIRST
 F_RET2_END     = 240   # Hinge_Green_Yellow returns 180°→0° SECOND
 F_END          = 240
 
-ROT_SIGN_1     = +1.0  # TODO: Hinge_Green_Yellow — verify sign in Blender
-ROT_SIGN_2     = +1.0  # TODO: Hinge_Red_Green   — verify sign in Blender
+ROT_SIGN_1     = +1.0  # Hinge_Green_Yellow — X-axis, confirmed
+ROT_SIGN_2     = +1.0  # Hinge_Red_Green   — Y-axis, confirmed
 
 # Red bottom interior center
 SEAT_RED_WORLD = mathutils.Vector((0.51, -0.51, 0.25))
@@ -41,10 +41,6 @@ SEAT_RED_WORLD = mathutils.Vector((0.51, -0.51, 0.25))
 ###############################################################################
 
 def reset_scene_to_canonical():
-    if bpy.app.driver_namespace.get("lorqb_run_all", False):
-        print("=== T2 Reset skipped (Run ALL mode) ===")
-        return
-
     all_names = [
         "Ball",
         "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
@@ -80,26 +76,33 @@ def reset_scene_to_canonical():
 # SECTION 3: Helpers
 ###############################################################################
 
-def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
+def _fcurves(obj):
     if not obj.animation_data or not obj.animation_data.action:
-        return
-    action = obj.animation_data.action
+        return []
+    act = obj.animation_data.action
     try:
-        fcurves = action.layers[0].strips[0].channelbags[0].fcurves
+        return act.fcurves
+    except AttributeError:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
     except Exception:
-        return
-    for fc in fcurves:
-        if fc.data_path == data_path or data_path in fc.data_path:
-            for kp in fc.keyframe_points:
-                if abs(kp.co[0] - frame) < 0.5:
-                    kp.interpolation = interp
+        pass
+    try:
+        return act.layers[0].strips[0].channelbags[0].fcurves
+    except Exception:
+        return []
 
 def key_rot(obj, axis, sign, frame, degrees, interp='LINEAR'):
     bpy.context.scene.frame_set(frame)
     obj.rotation_mode = 'XYZ'
     obj.rotation_euler[axis] = sign * math.radians(degrees)
     obj.keyframe_insert(data_path="rotation_euler", index=axis, frame=frame)
-    set_last_keyframe_interpolation(obj, "rotation_euler", frame, interp)
+    for fc in _fcurves(obj):
+        if "rotation_euler" in fc.data_path:
+            for kp in fc.keyframe_points:
+                if abs(kp.co[0] - frame) < 0.5:
+                    kp.interpolation = interp
 
 def key_influence(obj, constraint_name, frame, value):
     bpy.context.scene.frame_set(frame)
@@ -110,7 +113,11 @@ def key_influence(obj, constraint_name, frame, value):
     con.influence = value
     data_path = f'constraints["{constraint_name}"].influence'
     obj.keyframe_insert(data_path=data_path, frame=frame)
-    set_last_keyframe_interpolation(obj, data_path, frame, 'CONSTANT')
+    for fc in _fcurves(obj):
+        if constraint_name in fc.data_path:
+            for kp in fc.keyframe_points:
+                if abs(kp.co[0] - frame) < 0.5:
+                    kp.interpolation = 'CONSTANT'
 
 def parent_preserve_world(child, new_parent):
     mw = child.matrix_world.copy()
@@ -221,7 +228,7 @@ def run_animation():
     #   Stage 1:  0°→180°  (frames  1–80)
     #   Hold:    180°       (frames 80–200) — waits for H2 to retract
     #   Stage 4: 180°→0°   (frames 201–240)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_START,      0)   # TODO: axis 0 = X — verify
+    key_rot(hinge1, 0, ROT_SIGN_1, F_START,      0)   # axis 0 = X
     key_rot(hinge1, 0, ROT_SIGN_1, F_S1_END,   180)
     key_rot(hinge1, 0, ROT_SIGN_1, F_S2_END,   180)
     key_rot(hinge1, 0, ROT_SIGN_1, F_SWAP,     180)
@@ -233,7 +240,7 @@ def run_animation():
     #   Hold:     90°       (frames 160–161)
     #   Stage 3:  90°→0°   (frames 162–200) — retracts FIRST
     #   Hold:      0°       (frames 200–240)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_START,      0)   # TODO: axis 1 = Y — verify
+    key_rot(hinge2, 1, ROT_SIGN_2, F_START,      0)   # axis 1 = Y
     key_rot(hinge2, 1, ROT_SIGN_2, F_S1_END,     0)
     key_rot(hinge2, 1, ROT_SIGN_2, F_S2_END,    90)
     key_rot(hinge2, 1, ROT_SIGN_2, F_SWAP,      90)
@@ -275,42 +282,42 @@ def run_animation():
 ###############################################################################
 
 class LORQB_OT_reset_t2(bpy.types.Operator):
-    bl_idname      = "lorqb.reset_t2"
+    bl_idname      = "lorqb.reset_t02"
     bl_label       = "Reset to Base"
     bl_description = "Reset all objects to canonical state"
 
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "T2 reset to base")
+        self.report({'INFO'}, "T02 reset to base")
         return {'FINISHED'}
 
 
 class LORQB_OT_run_t2(bpy.types.Operator):
-    bl_idname      = "lorqb.run_t2"
-    bl_label       = "Run T2: Yellow → Red"
-    bl_description = "Arm T2 animation: Yellow transfers ball to Red"
+    bl_idname      = "lorqb.run_t02"
+    bl_label       = "Run T02: Yellow → Red"
+    bl_description = "Arm T02 animation: Yellow transfers ball to Red"
 
     def execute(self, context):
         result = run_animation()
         if result:
-            self.report({'INFO'}, "T2 armed — press Play to run")
+            self.report({'INFO'}, "T02 armed — press Play to run")
         else:
-            self.report({'ERROR'}, "T2 failed — check console for missing objects")
+            self.report({'ERROR'}, "T02 failed — check console for missing objects")
         return {'FINISHED'}
 
 
 class LORQB_PT_t2_panel(bpy.types.Panel):
-    bl_label       = "LorQB — T2"
-    bl_idname      = "LORQB_PT_t2_panel"
+    bl_label       = "LorQB — T02: Yellow → Red"
+    bl_idname      = "LORQB_PT_t02_panel"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = "LorQB"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.reset_t2", text="Reset to Base", icon='LOOP_BACK')
+        layout.operator("lorqb.reset_t02", text="Reset to Base", icon='LOOP_BACK')
         layout.separator()
-        layout.operator("lorqb.run_t2", text="Run T2: Yellow → Red", icon='PLAY')
+        layout.operator("lorqb.run_t02", text="Run T02: Yellow → Red", icon='PLAY')
 
 
 _classes = [LORQB_OT_reset_t2, LORQB_OT_run_t2, LORQB_PT_t2_panel]
@@ -322,6 +329,13 @@ def register():
         except Exception:
             pass
         bpy.utils.register_class(cls)
+    # Remove old panel bl_idname from prior runs (migration guard)
+    old_panel = getattr(bpy.types, "LORQB_PT_t2_panel", None)
+    if old_panel:
+        try:
+            bpy.utils.unregister_class(old_panel)
+        except Exception:
+            pass
 
 def unregister():
     for cls in reversed(_classes):
