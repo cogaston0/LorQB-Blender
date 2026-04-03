@@ -154,7 +154,7 @@ def parent_preserve_world(child, new_parent):
     child.matrix_world = mw
 
 ################################################################################
-# SECTION 8: Main C15 setup function
+# SECTION 7: Main C15 setup function
 ################################################################################
 def setup_yellow_to_blue():
     print("=== C15 Start: Yellow → Blue ===")
@@ -319,7 +319,7 @@ def setup_yellow_to_blue():
     return True
 
 ################################################################################
-# SECTION 9: Blender UI Panel and Operator
+# SECTION 8: Blender UI Panel and Operator
 ################################################################################
 class LORQB_OT_ResetC15(bpy.types.Operator):
     bl_idname  = "lorqb.reset_c15"
@@ -361,7 +361,7 @@ class LORQB_OT_YellowToBlue(bpy.types.Operator):
         return {'FINISHED'}
 
 ################################################################################
-# SECTION 10: Register / Unregister
+# SECTION 9: Register / Unregister
 ################################################################################
 def register():
     for cls in [LORQB_OT_ResetC15, LORQB_PT_C15Panel, LORQB_OT_YellowToBlue]:

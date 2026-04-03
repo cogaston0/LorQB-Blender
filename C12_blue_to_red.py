@@ -1,5 +1,5 @@
 # ============================================================================
-# lorqb_blue_to_red_C12.py  (Blender 5.0.1)
+# C12_blue_to_red.py  (Blender 5.0.1)
 # C12 — Blue → Red
 # Frames 1 – 240 | Transfer at frame 120 → 121
 # Chain: Blue — Red — Green — Yellow

@@ -117,8 +117,17 @@ def reset_scene_to_canonical():
 def _fcurves(obj):
     if not obj.animation_data or not obj.animation_data.action:
         return []
+    act = obj.animation_data.action
     try:
-        return obj.animation_data.action.layers[0].strips[0].channelbags[0].fcurves
+        return act.fcurves
+    except AttributeError:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
+    except Exception:
+        pass
+    try:
+        return act.layers[0].strips[0].channelbags[0].fcurves
     except Exception:
         return []
 
@@ -297,40 +306,40 @@ def run_animation():
 ###############################################################################
 
 class LORQB_OT_reset_t3(bpy.types.Operator):
-    bl_idname      = "lorqb.reset_t3"
+    bl_idname      = "lorqb.reset_t03"
     bl_label       = "Reset to Base"
     bl_description = "Reset all objects to canonical state"
 
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "T3 reset to base")
+        self.report({'INFO'}, "T03 reset to base")
         return {'FINISHED'}
 
 class LORQB_OT_run_t3(bpy.types.Operator):
-    bl_idname      = "lorqb.run_t3"
-    bl_label       = "Run T3: Red → Yellow"
-    bl_description = "Arm T3 animation: Red transfers ball to Yellow"
+    bl_idname      = "lorqb.run_t03"
+    bl_label       = "Run T03: Red → Yellow"
+    bl_description = "Arm T03 animation: Red transfers ball to Yellow"
 
     def execute(self, context):
         result = run_animation()
         if result:
-            self.report({'INFO'}, "T3 armed — press Play to run")
+            self.report({'INFO'}, "T03 armed — press Play to run")
         else:
-            self.report({'ERROR'}, "T3 failed — check console")
+            self.report({'ERROR'}, "T03 failed — check console")
         return {'FINISHED'}
 
 class LORQB_PT_t3_panel(bpy.types.Panel):
-    bl_label       = "LorQB — T3"
-    bl_idname      = "LORQB_PT_t3_panel"
+    bl_label       = "LorQB — T03: Red → Yellow"
+    bl_idname      = "LORQB_PT_t03_panel"
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = "LorQB"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.reset_t3", text="Reset to Base", icon='LOOP_BACK')
+        layout.operator("lorqb.reset_t03", text="Reset to Base", icon='LOOP_BACK')
         layout.separator()
-        layout.operator("lorqb.run_t3",   text="Run T3: Red → Yellow", icon='PLAY')
+        layout.operator("lorqb.run_t03",   text="Run T03: Red → Yellow", icon='PLAY')
 
 _classes = [LORQB_OT_reset_t3, LORQB_OT_run_t3, LORQB_PT_t3_panel]
 
@@ -339,8 +348,11 @@ _classes = [LORQB_OT_reset_t3, LORQB_OT_run_t3, LORQB_PT_t3_panel]
 ###############################################################################
 
 def register():
-    for name in ["LORQB_OT_t3_stage1", "LORQB_OT_t3_stage2a", "LORQB_OT_t3_stage2b",
-                 "LORQB_PT_t3_panel",  "LORQB_OT_run_t3",     "LORQB_OT_reset_t3"]:
+    # Note: operator lookups use Python class names (LORQB_OT_*), not bl_idnames.
+    # Python class names are unchanged; only bl_idnames were updated to zero-padded form.
+    # LORQB_PT_t3_panel is the old panel bl_idname included for migration from prior runs.
+    for name in ["LORQB_PT_t03_panel", "LORQB_OT_run_t3", "LORQB_OT_reset_t3",
+                 "LORQB_PT_t3_panel"]:
         cls = getattr(bpy.types, name, None)
         if cls:
             try:

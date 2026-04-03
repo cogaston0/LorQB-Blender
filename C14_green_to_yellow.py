@@ -1,5 +1,5 @@
 # ============================================================================
-# lorqb_green_to_yellow_C14.py  (Blender 5.0.1)
+# C14_green_to_yellow.py  (Blender 5.0.1)
 # C14 — Green → Yellow
 # Frames 481 – 720 | Transfer at frame 600 → 601
 # Chain: Blue — Red — Green — Yellow
