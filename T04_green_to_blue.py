@@ -1,37 +1,26 @@
 # ============================================================================
 # T04_green_to_blue.py  (Blender 5.0.1)
-# T4 — Green → Blue  (mirror of T03 Red → Yellow)
+# T4 — Green → Blue
 #
-# Three moves, no detachment:
-#   Stage 1  (  1– 80): HBR 180° — Blue opens toward Green      [mirrors HGY 180° in T03]
-#   Stage 2a ( 81–120): Green 90° — Cube_Green rotates toward Blue [mirrors Red 90° in T03]
-#   Stage 2b (121–160): HRG  90° — whole system, Green lands on Blue [same mechanism as T03]
-#   Frame 161:          Ball transfers Green → Blue
-#   Return   (162–200): HRG + Green back to 0°
-#   Return   (201–240): HBR back to 0°
+# System pivot: Pivot_System_T4 at world (0, 0, 1)
+# Pivot rotates -90° on Y (frames 121–160) to position Green above Blue
 #
-# Mirror logic (T03 → T04):
-#   Yellow (destination, opened 180°) → Blue
-#   HGY    (destination hinge, 180°)  → HBR
-#   Red    (source, rotates 90° 2a)   → Green
-#   HBR    (passive bridge in T03)    → HGY  (passive bridge in T04)
-#   Blue   (passive in T03)           → Yellow (passive in T04)
+# Parenting (constant, no re-parenting mid-animation):
+#   Pivot_System_T4 (root)
+#   ├── Hinge_Red_Green (HRG)
+#   │   └── Cube_Green
+#   │       └── Hinge_Green_Yellow → Cube_Yellow
+#   └── Hinge_Blue_Red (HBR)
+#       └── Cube_Red
+#           └── Cube_Blue
 #
-# No detachment guarantee:
-#   HRG is the world root. Every cube and hinge is a child.
-#   Rotations move the tree — no child is ever unparented mid-animation.
-#
-# Hierarchy:
-#   HRG (root)
-#   ├── Red  → HBR → Blue   (Red passive bridge; HBR opens Blue in Stage 1)
-#   └── HGY  → Green        (HGY passive; Green rotates in Stage 2a)
-#                └── Yellow  (passive rider)
-#
-# Sign notes — mirrored from T03:
-#   HBR_SIGN  = +1.0  (same as HGY_SIGN in T03 — symmetric opening)
-#   GREEN_SIGN = +1.0  (opposite of RED_SIGN=-1.0 in T03 — mirrored geometry)
-#   HRG_SIGN  = +1.0  (opposite of HRG_SIGN=-1.0 in T03 — system swings other way)
-#   If a stage goes the wrong direction, flip its sign.
+# Animation:
+#   Frames 1–80:     Hinge_Blue_Red +180°  (open Blue)
+#   Frames 81–120:   Hinge_Red_Green +90°  (swing Green)
+#   Frames 121–160:  Pivot_System_T4 −90° Y (system reposition)
+#   Frame 161:       Ball transfers Green → Blue
+#   Frames 162–200:  Pivot_System_T4 back to 0°, HRG back to 0°
+#   Frames 201–240:  HBR back to 0°
 # ============================================================================
 
 import bpy
@@ -42,40 +31,39 @@ import mathutils
 # SECTION 1: Constants
 ###############################################################################
 
+PIVOT_NAME = "System_Rotator"
+Z_HINGE    = 1.0
+
 F_START    = 1
-F_S1_END   = 80     # HBR reaches 180° — Blue fully open
-F_S2A_END  = 120    # Green reaches 90° — aimed at Blue
-F_S2_END   = 160    # HRG reaches 90° — system complete, Green on Blue
-F_SWAP     = 161    # Ball transfers Green → Blue
-F_RET1_END = 200    # HRG + Green back to 0°  (LIFO: last-in first-out)
-F_RET2_END = 240    # HBR back to 0°           (LIFO: first-in last-out)
+F_S1_END   = 80
+F_S2A_END  = 120
+F_S2B_END  = 160
+F_SWAP     = 161
+F_RET1_END = 200
+F_RET2_END = 240
 F_END      = 240
 
-# Stage 1: HBR opens Blue 180° — mirror of HGY opening Yellow in T03
-HBR_AXIS   = 0       # X
-HBR_SIGN   = +1.0   # same as HGY_SIGN in T03
+HBR_AXIS   = 0
+HBR_SIGN   = +1.0
 HBR_DEG    = 180.0
 
-# Stage 2a: Cube_Green rotates 90° toward Blue — mirror of Cube_Red in T03
-GREEN_AXIS = 1       # Y
-GREEN_SIGN = +1.0   # mirrored from RED_SIGN=-1.0 in T03
-GREEN_DEG  = 90.0
-
-# Stage 2b: HRG swings whole system 90° — mirror of HRG in T03
-HRG_AXIS   = 1       # Y
-HRG_SIGN   = +1.0   # mirrored from HRG_SIGN=-1.0 in T03
+HRG_AXIS   = 1
+HRG_SIGN   = -1.0
 HRG_DEG    = 90.0
 
-# Ball starts inside Green (canonical world position)
-BALL_GREEN_INTERIOR  = mathutils.Vector((-0.51, -0.51, 0.25))
-# Blue destination side hole — mirrored from SEAT_YELLOW_SIDE_WORLD in T03
-SEAT_BLUE_SIDE_WORLD = mathutils.Vector(( 0.51, -0.51, 0.25))
+PIVOT_AXIS = 1
+PIVOT_SIGN = -1.0
+PIVOT_DEG  = 90.0
+
+BALL_GREEN_INTERIOR     = mathutils.Vector((-0.51, -0.51, 0.25))
+SEAT_BLUE_SIDE_WORLD    = mathutils.Vector(( 0.51, -0.51, 0.25))
 
 ###############################################################################
 # SECTION 2: Reset
 ###############################################################################
 
 def reset_scene_to_canonical():
+    # Clear animation
     for name in ["Ball",
                  "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
                  "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
@@ -83,32 +71,43 @@ def reset_scene_to_canonical():
         if obj and obj.animation_data:
             obj.animation_data_clear()
 
+    # Clear ball constraints
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
+    # Clear animation on System_Rotator and zero its rotation — NEVER delete SR
+    sr = bpy.data.objects.get(PIVOT_NAME)
+    if sr:
+        if sr.animation_data:
+            sr.animation_data_clear()
+        sr.rotation_mode  = 'XYZ'
+        sr.rotation_euler = (0.0, 0.0, 0.0)
+
+    # Zero hinges
     for name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
         h = bpy.data.objects.get(name)
         if h:
             h.rotation_mode  = 'XYZ'
             h.rotation_euler = (0.0, 0.0, 0.0)
 
-    # Flush depsgraph BEFORE clearing parents so world transforms are stable
     bpy.context.view_layer.update()
 
+    # Unparent all
     for name in ["Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
                  "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
         obj = bpy.data.objects.get(name)
-        if obj:
+        if obj and obj.parent:
             obj.parent = None
 
     bpy.context.view_layer.update()
 
+    # Restore canonical positions (confirmed by user Q3)
     canonical = {
-        "Cube_Blue":          ( 0.51,  0.0,  1.0),
-        "Cube_Red":           ( 0.0,  -0.51, 1.0),
-        "Cube_Green":         (-0.51,  0.0,  1.0),
-        "Cube_Yellow":        (-0.51,  0.0,  1.0),
+        "Cube_Blue":          ( 0.51,  0.51, 1.0),
+        "Cube_Red":           ( 0.51, -0.51, 1.0),
+        "Cube_Green":         (-0.51, -0.51, 1.0),
+        "Cube_Yellow":        (-0.51,  0.51, 1.0),
         "Hinge_Blue_Red":     ( 0.51,  0.0,  1.0),
         "Hinge_Red_Green":    ( 0.0,  -0.51, 1.0),
         "Hinge_Green_Yellow": (-0.51,  0.0,  1.0),
@@ -116,16 +115,9 @@ def reset_scene_to_canonical():
     for name, loc in canonical.items():
         obj = bpy.data.objects.get(name)
         if obj:
-            obj.location       = loc
+            obj.location       = mathutils.Vector(loc)
             obj.rotation_mode  = 'XYZ'
             obj.rotation_euler = (0.0, 0.0, 0.0)
-            obj.scale          = (1.0, 1.0, 1.0)
-
-    for seat_name in ["Seat_Green_Start", "Seat_Blue_Side",
-                      "Seat_Green", "Seat_Blue", "Seat_Red", "Seat_Yellow"]:
-        obj = bpy.data.objects.get(seat_name)
-        if obj:
-            bpy.data.objects.remove(obj, do_unlink=True)
 
     bpy.context.view_layer.update()
     print("=== T4 reset to canonical ===")
@@ -134,33 +126,49 @@ def reset_scene_to_canonical():
 # SECTION 3: Helpers
 ###############################################################################
 
-def _fcurves(obj):
+def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
     if not obj.animation_data or not obj.animation_data.action:
-        return []
-    act = obj.animation_data.action
+        return
+    action = obj.animation_data.action
+    fcurves = None
+
     try:
-        return act.fcurves
+        if action.fcurves:
+            fcurves = action.fcurves
     except AttributeError:
         pass
-    try:
-        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
-    except Exception:
-        pass
-    try:
-        return act.layers[0].strips[0].channelbags[0].fcurves
-    except Exception:
-        return []
+
+    if fcurves is None:
+        try:
+            slot = action.slots[0]
+            strip = action.layers[0].strips[0]
+            bag = strip.channelbag_for_slot(slot)
+            if bag is not None:
+                fcurves = bag.fcurves
+        except Exception:
+            pass
+
+    if fcurves is None:
+        try:
+            fcurves = action.layers[0].strips[0].channelbags[0].fcurves
+        except Exception:
+            pass
+
+    if fcurves is None:
+        return
+
+    for fc in fcurves:
+        if data_path in fc.data_path:
+            for kp in fc.keyframe_points:
+                if abs(kp.co[0] - frame) < 0.5:
+                    kp.interpolation = interp
 
 def key_rot(obj, axis, sign, frame, degrees, interp='LINEAR'):
     bpy.context.scene.frame_set(frame)
     obj.rotation_mode = 'XYZ'
     obj.rotation_euler[axis] = sign * math.radians(degrees)
     obj.keyframe_insert(data_path="rotation_euler", index=axis, frame=frame)
-    for fc in _fcurves(obj):
-        if "rotation_euler" in fc.data_path:
-            for kp in fc.keyframe_points:
-                if abs(kp.co[0] - frame) < 0.5:
-                    kp.interpolation = interp
+    set_last_keyframe_interpolation(obj, "rotation_euler", frame, interp)
 
 def key_influence(obj, con_name, frame, value):
     bpy.context.scene.frame_set(frame)
@@ -171,11 +179,7 @@ def key_influence(obj, con_name, frame, value):
     con.influence = value
     dp = f'constraints["{con_name}"].influence'
     obj.keyframe_insert(data_path=dp, frame=frame)
-    for fc in _fcurves(obj):
-        if con_name in fc.data_path:
-            for kp in fc.keyframe_points:
-                if abs(kp.co[0] - frame) < 0.5:
-                    kp.interpolation = 'CONSTANT'
+    set_last_keyframe_interpolation(obj, dp, frame, 'CONSTANT')
 
 ###############################################################################
 # SECTION 4: Animation
@@ -204,41 +208,65 @@ def run_animation():
         print("ERROR: Missing:", missing)
         return False
 
-    # ── Zero hinges ──────────────────────────────────────────────────────────
     bpy.context.scene.frame_set(F_START)
     for h in (hinge_gy, hinge_rg, hinge_br):
         h.rotation_mode  = 'XYZ'
         h.rotation_euler = (0.0, 0.0, 0.0)
     bpy.context.view_layer.update()
 
-    # ── Build hierarchy — HRG is world root (mirrors T03 exactly) ────────────
-    # Local offsets = world_child − world_parent at canonical, all rotations zero.
-    #
-    # T03:  HRG → Green(-0.51,0.51,0) → HGY(0,0,0) → Yellow(0,0,0)
-    #       HRG → HBR(0.51,0.51,0) → Red(-0.51,-0.51,0) → Blue(0.51,0.51,0)
-    #
-    # T04:  HRG → HGY(-0.51,0.51,0) → Green(0,0,0) → Yellow(0,0,0)   [src branch]
-    #       HRG → Red(0,0,0) → HBR(0.51,0.51,0) → Blue(0,0,0)         [dest branch]
+    # ── Build parenting hierarchy — HRG is root (mirrored from T03) ────────────
     I4 = mathutils.Matrix.Identity(4)
 
     def attach(child, parent, local_xyz):
         child.parent                = parent
         child.matrix_parent_inverse = I4.copy()
-        child.location              = local_xyz
+        child.location              = mathutils.Vector(local_xyz)
         child.rotation_euler        = (0.0, 0.0, 0.0)
         bpy.context.view_layer.update()
 
-    # Source branch: HRG → HGY → Green → Yellow
-    attach(hinge_gy, hinge_rg, (-0.51,  0.51, 0.0))  # HGY local from HRG
-    attach(green,    hinge_gy, ( 0.0,   0.0,  0.0))  # Green at HGY origin
-    attach(yellow,   green,    ( 0.0,   0.0,  0.0))  # Yellow passive rider
+    # HRG is world root (exact T03 structure)
+    # Branch 1: Green → HGY → Yellow (exact T03)
+    attach(green,    hinge_rg, (-0.51,  0.51, 0.0))
+    attach(hinge_gy, green,    ( 0.0,   0.0,  0.0))
+    attach(yellow,   hinge_gy, ( 0.0,   0.0,  0.0))
 
-    # Destination branch: HRG → Red → HBR → Blue
-    attach(red,      hinge_rg, ( 0.0,   0.0,  0.0))  # Red at HRG origin (passive bridge)
-    attach(hinge_br, red,      ( 0.51,  0.51, 0.0))  # HBR local from Red
-    attach(blue,     hinge_br, ( 0.0,   0.0,  0.0))  # Blue at HBR origin (destination)
+    # Branch 2: HBR → Red → Blue (exact T03)
+    attach(hinge_br, hinge_rg, ( 0.51,  0.51, 0.0))
+    attach(red,      hinge_br, (-0.51, -0.51, 0.0))
+    attach(blue,     red,      ( 0.51,  0.51, 0.0))
 
-    print("Hierarchy: HRG(root) → [HGY→Green→Yellow] + [Red→HBR→Blue]")
+    # Parent hinge_rg (current root) under System_Rotator, preserving world transform
+    system_rotator = bpy.data.objects.get(PIVOT_NAME)
+    if not system_rotator:
+        print(f"ERROR: {PIVOT_NAME} not found in scene")
+        return False
+    system_rotator.rotation_mode  = 'XYZ'
+    system_rotator.rotation_euler = (0.0, 0.0, 0.0)
+    bpy.context.view_layer.update()
+    hinge_rg_world = hinge_rg.matrix_world.copy()
+    hinge_rg.parent = system_rotator
+    hinge_rg.matrix_parent_inverse = system_rotator.matrix_world.inverted() @ hinge_rg_world
+    bpy.context.view_layer.update()
+
+    print("Hierarchy: System_Rotator → HRG → [Green→HGY→Yellow] + [HBR→Red→Blue]")
+
+    # Verify hierarchy
+    bpy.context.view_layer.update()
+    _verify = {
+        "Cube_Green":         (-0.51,  0.0,  1.0),
+        "Hinge_Green_Yellow": (-0.51,  0.0,  1.0),
+        "Cube_Yellow":        (-0.51,  0.0,  1.0),
+        "Hinge_Blue_Red":     ( 0.51,  0.0,  1.0),
+        "Cube_Red":           ( 0.0,  -0.51, 1.0),
+        "Cube_Blue":          ( 0.51,  0.51, 1.0),
+    }
+    print("=== T4 Hierarchy World-Position Verification ===")
+    for _name, _expected in _verify.items():
+        _obj = bpy.data.objects.get(_name)
+        if _obj:
+            _actual = tuple(round(v, 3) for v in _obj.matrix_world.translation)
+            _ok = all(abs(_actual[i] - _expected[i]) < 0.02 for i in range(3))
+            print(f"  {'OK    ' if _ok else 'DETACH'} {_name}: actual={_actual}  expected={_expected}")
 
     # ── Remove rigid body from ball ──────────────────────────────────────────
     if ball.rigid_body:
@@ -248,89 +276,75 @@ def run_animation():
         except Exception:
             pass
 
-    # ── Place ball inside Green ───────────────────────────────────────────────
+    # ── Place ball inside Green ──────────────────────────────────────────────
     bpy.context.scene.frame_set(F_START)
     ball.location = BALL_GREEN_INTERIOR.copy()
     ball.keyframe_insert(data_path="location", frame=F_START)
     bpy.context.view_layer.update()
 
-    # ── Seats ────────────────────────────────────────────────────────────────
-    ball_world = ball.matrix_world.translation.copy()
+    # ── Use existing scene empties — NEVER create new seats ─────────────────
+    seat_green = bpy.data.objects.get("Seat_Green")
+    seat_blue  = bpy.data.objects.get("Seat_Blue")
+    if not seat_green or not seat_blue:
+        print("ERROR: Seat_Green or Seat_Blue not found in scene")
+        return False
 
-    seat_green_start = bpy.data.objects.new("Seat_Green_Start", None)
-    seat_green_start.empty_display_type = 'SPHERE'
-    seat_green_start.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_green_start)
-    seat_green_start.parent   = green
-    seat_green_start.location = green.matrix_world.inverted() @ ball_world
-
-    seat_blue_side = bpy.data.objects.new("Seat_Blue_Side", None)
-    seat_blue_side.empty_display_type = 'SPHERE'
-    seat_blue_side.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_blue_side)
-    seat_blue_side.parent   = blue
-    seat_blue_side.location = blue.matrix_world.inverted() @ SEAT_BLUE_SIDE_WORLD
-
-    bpy.context.view_layer.update()
-
-    # ── Ball constraints ─────────────────────────────────────────────────────
+    # ── Ball constraints (source=Seat_Green, destination=Seat_Blue) ──────────
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name   = "Latch_Green_Start"
-    latch_green.target = seat_green_start
+    latch_green.target = seat_green
 
     latch_blue = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_blue.name   = "Latch_Blue_Side"
-    latch_blue.target = seat_blue_side
+    latch_blue.target = seat_blue
 
-    # ── Stage 1 — HBR 0°→180° (Blue opens) ──────────────────────────────────
-    # Mirrors T03 Stage 1: HGY 0°→180° (Yellow opened)
+    # ── Keyframes ────────────────────────────────────────────────────────────
+
+    # Stage 1 (1–80): HBR +180°
     key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_START,    0)
     key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_S1_END,   HBR_DEG)
-    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_S2_END,   HBR_DEG)   # hold through 2a+2b
-    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_SWAP,     HBR_DEG)
-    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_RET1_END, HBR_DEG)
+    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_S2B_END,  HBR_DEG)   # hold
+    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_SWAP,     HBR_DEG)   # hold
+    key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_RET1_END, HBR_DEG)   # hold
     key_rot(hinge_br, HBR_AXIS, HBR_SIGN, F_RET2_END, 0)
 
-    # ── Stage 2a — Green 0°→90° (Cube_Green rotates toward Blue) ─────────────
-    # Mirrors T03 Stage 2a: Red 0°→90° (Cube_Red rotated toward Yellow)
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_START,    0)
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_S1_END,   0)          # hold during Stage 1
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_S2A_END,  GREEN_DEG)
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_SWAP,     GREEN_DEG)
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_RET1_END, 0)
-    key_rot(green, GREEN_AXIS, GREEN_SIGN, F_RET2_END, 0)
-
-    # ── Stage 2b — HRG 0°→90° (whole system — Green lands on Blue) ───────────
-    # Mirrors T03 Stage 2b: HRG 0°→90° (Red landed on Yellow)
+    # Stage 2a (81–120): HRG +90°
     key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_START,    0)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S1_END,   0)          # hold during Stage 1
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2A_END,  0)          # hold during Stage 2a
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2_END,   HRG_DEG)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_SWAP,     HRG_DEG)
+    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S1_END,   0)          # hold Stage 1
+    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2A_END,  HRG_DEG)
+    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2B_END,  HRG_DEG)    # hold
+    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_SWAP,     HRG_DEG)    # hold
     key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_RET1_END, 0)
     key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_RET2_END, 0)
 
-    # ── Ball transfer at frame 161 ────────────────────────────────────────────
-    key_influence(ball, "Latch_Green_Start", F_START,   1.0)
-    key_influence(ball, "Latch_Blue_Side",   F_START,   0.0)
-    key_influence(ball, "Latch_Green_Start", F_S2_END,  1.0)
-    key_influence(ball, "Latch_Blue_Side",   F_S2_END,  0.0)
-    key_influence(ball, "Latch_Green_Start", F_SWAP,    0.0)
-    key_influence(ball, "Latch_Blue_Side",   F_SWAP,    1.0)
-    key_influence(ball, "Latch_Green_Start", F_END,     0.0)
-    key_influence(ball, "Latch_Blue_Side",   F_END,     1.0)
+    # Stage 2b (121–160): System_Rotator -90° Y
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_START,    0)
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_S2A_END,  0)           # hold through Stage 2a
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_S2B_END,  PIVOT_DEG)   # -90° Y by frame 160
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_SWAP,     PIVOT_DEG)   # hold through swap
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_RET1_END, 0)           # return to 0° by frame 200
+    key_rot(system_rotator, PIVOT_AXIS, PIVOT_SIGN, F_RET2_END, 0)           # hold at 0°
+
+    # Ball transfer at frame 161
+    key_influence(ball, "Latch_Green_Start", F_START,    1.0)
+    key_influence(ball, "Latch_Blue_Side",   F_START,    0.0)
+    key_influence(ball, "Latch_Green_Start", F_S2B_END,  1.0)
+    key_influence(ball, "Latch_Blue_Side",   F_S2B_END,  0.0)
+    key_influence(ball, "Latch_Green_Start", F_SWAP,     0.0)
+    key_influence(ball, "Latch_Blue_Side",   F_SWAP,     1.0)
+    key_influence(ball, "Latch_Green_Start", F_END,      0.0)
+    key_influence(ball, "Latch_Blue_Side",   F_END,      1.0)
 
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
 
     print("=== T4 Complete: Green → Blue ===")
-    print(f"Stage 1  ({F_START:3d}–{F_S1_END:3d}): HBR  180° — Blue opens   [mirror HGY T03]")
-    print(f"Stage 2a ({F_S1_END+1:3d}–{F_S2A_END:3d}): Green  90° — Green aims  [mirror Red T03]")
-    print(f"Stage 2b ({F_S2A_END+1:3d}–{F_S2_END:3d}): HRG   90° — whole system [mirror HRG T03]")
-    print(f"Frame {F_SWAP}: ball transfers Green→Blue")
-    print(f"Return  ({F_SWAP+1:3d}–{F_RET1_END:3d}): HRG + Green back to 0°  (LIFO)")
-    print(f"Return  ({F_RET1_END+1:3d}–{F_RET2_END:3d}): HBR back to 0°          (LIFO)")
+    print("Stage 1  (1–80):    HBR +180° — Blue opens")
+    print("Stage 2a (81–120):  HRG +90° — Green swings")
+    print("Stage 2b (121–160): Pivot −90° Y — system repositions")
+    print("Frame 161: ball transfers Green → Blue")
+    print("Return (162–240): all back to 0°")
     return True
 
 ###############################################################################
@@ -340,24 +354,20 @@ def run_animation():
 class LORQB_OT_reset_t4(bpy.types.Operator):
     bl_idname      = "lorqb.reset_t4"
     bl_label       = "Reset to Base"
-    bl_description = "Reset all objects to canonical state"
-
+    bl_description = "Clear all T4 animation and parenting"
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "T4 reset to base")
+        self.report({'INFO'}, "T4 reset")
         return {'FINISHED'}
 
 class LORQB_OT_run_t4(bpy.types.Operator):
     bl_idname      = "lorqb.run_t4"
     bl_label       = "Run T4: Green → Blue"
-    bl_description = "Arm T4: HBR opens Blue, Green rotates, HRG swings — ball drops Green→Blue"
-
+    bl_description = "Run full T4 sequence"
     def execute(self, context):
-        result = run_animation()
-        if result:
-            self.report({'INFO'}, "T4 armed — press Play to run")
-        else:
-            self.report({'ERROR'}, "T4 failed — check console")
+        ok = run_animation()
+        self.report({'INFO'} if ok else {'ERROR'},
+                    "T4 armed — play 1–240" if ok else "FAILED — see console")
         return {'FINISHED'}
 
 class LORQB_PT_t4_panel(bpy.types.Panel):
@@ -366,7 +376,6 @@ class LORQB_PT_t4_panel(bpy.types.Panel):
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = "LorQB"
-
     def draw(self, context):
         layout = self.layout
         layout.operator("lorqb.reset_t4", text="Reset to Base",        icon='LOOP_BACK')
@@ -376,25 +385,21 @@ class LORQB_PT_t4_panel(bpy.types.Panel):
 _classes = [LORQB_OT_reset_t4, LORQB_OT_run_t4, LORQB_PT_t4_panel]
 
 ###############################################################################
-# SECTION 6: Register / Entry Point
+# SECTION 6: Entry Point
 ###############################################################################
 
-def register():
-    for name in ["LORQB_PT_t4_panel", "LORQB_OT_run_t4", "LORQB_OT_reset_t4"]:
-        cls = getattr(bpy.types, name, None)
-        if cls:
+if __name__ == "__main__":
+    for _n in ["LORQB_OT_reset_t4", "LORQB_OT_run_t4", "LORQB_PT_t4_panel"]:
+        _c = getattr(bpy.types, _n, None)
+        if _c:
             try:
-                bpy.utils.unregister_class(cls)
+                bpy.utils.unregister_class(_c)
             except Exception:
                 pass
     for cls in _classes:
-        bpy.utils.register_class(cls)
-
-def unregister():
-    for cls in reversed(_classes):
         try:
-            bpy.utils.unregister_class(cls)
-        except Exception:
-            pass
-
-register()
+            bpy.utils.register_class(cls)
+            print(f"Registered: {cls.bl_idname}")
+        except Exception as e:
+            print(f"ERROR: {cls.__name__}: {e}")
+    print("T4 panel registered. Use 'Run T4' button to arm animation.")
