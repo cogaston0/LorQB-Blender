@@ -13,28 +13,33 @@ import bpy
 import os
 
 SCRIPTS_DIR = r"C:\rukmini_ai_loop\scripts"
+C_DIR = os.path.join(SCRIPTS_DIR, "C_series")
+T_DIR = os.path.join(SCRIPTS_DIR, "T_series")
 
 # Load + execute: T scripts coexist safely (each only unregisters its own class)
 EXECUTE = [
-    "T01_blue_to_green.py",
-    "T02_yellow_to_red.py",
-    "T03_red_to_yellow.py",
+    ("T", "T01_blue_to_green.py"),
+    ("T", "T02_yellow_to_red.py"),
+    ("T", "T03_red_to_yellow.py"),
 ]
 
 # Load only: C scripts use _unregister_all_lorqb() which removes all panels
 LOAD_ONLY = [
-    "C10_scene_build.py",
-    "C12_blue_to_red.py",
-    "C13_red_to_green.py",
-    "C14_green_to_yellow.py",
-    "C15_yellow_to_blue.py",
+    ("C", "C10_scene_build.py"),
+    ("C", "C12_blue_to_red.py"),
+    ("C", "C13_red_to_green.py"),
+    ("C", "C14_green_to_yellow.py"),
+    ("C", "C15_yellow_to_blue.py"),
 ]
 
 ALL_SCRIPTS = LOAD_ONLY + EXECUTE
 
+def script_path(group, filename):
+    return os.path.join(C_DIR if group == "C" else T_DIR, filename)
+
 print("\n=== Step 1: Loading scripts from disk ===")
-for filename in ALL_SCRIPTS:
-    filepath = os.path.join(SCRIPTS_DIR, filename)
+for group, filename in ALL_SCRIPTS:
+    filepath = script_path(group, filename)
     if not os.path.exists(filepath):
         print(f"  MISSING: {filepath}")
         continue
@@ -45,8 +50,8 @@ for filename in ALL_SCRIPTS:
     print(f"  Loaded:  {filename}")
 
 print("\n=== Step 2: Registering T panels ===")
-for filename in EXECUTE:
-    filepath = os.path.join(SCRIPTS_DIR, filename)
+for group, filename in EXECUTE:
+    filepath = script_path(group, filename)
     if not os.path.exists(filepath):
         print(f"  MISSING: {filepath}")
         continue

@@ -1,60 +1,50 @@
-\# LorQB - Lord of the Quantum Balls
+# LorQB - Lord of the Quantum Balls
 
-\*\*Blender Version:\*\* 5.1.0 
+**Blender Version:** 5.1.0 
 
-\*\*Original Design:\*\* Jose R. Velazquez © 2014  
+**Original Design:** Jose R. Velazquez © 2014  
 
-\*\*Developer:\*\* Carlos  
+**Developer:** Carlos  
 
-\*\*AI System:\*\* Rukmini Trio (Claude + ChatGPT + NotebookLM)
+**AI System:** Rukmini Trio (Claude + ChatGPT + NotebookLM)
 
+## Project Structure
 
+C_series/
 
-\## Project Structure
+- C-series Python files (C01, C10, C12, C13, C14, C15)
 
-scripts/
+T_series/
 
-&nbsp; construction/   -> Scene building scripts (stable, do not modify)
+- T-series Python files (T01, T02, T03, T04)
 
-&nbsp; animation/      -> Per-sequence animation scripts (C12, C15, etc.)
+Root support files:
 
-&nbsp; diagnostic/     -> Debugging and state-check scripts
+- UTIL_load_all_scripts.py
+- C17_Master_Runner.blend
+- LorQB Video Game.pdf
+- README.md
 
-docs/
-
-&nbsp; validation\_reports/  -> NotebookLM + ChatGPT verification outputs
-
-&nbsp; sequence\_logs/       -> Per-sequence progress notes
-
-
-
-\## Cube Chain Topology
+## Cube Chain Topology
 
 Yellow — Green — Red — Blue (snake chain, hinged on top)
 
+## Level 1 Status
 
+- Goal: complete all sequences for Level 1 with modular, reorderable scripts.
 
-\## Level 1 Status
+- Current focus: C15 (Yellow -> Blue).
 
-\- Goal: complete all sequences for Level 1 with modular, reorderable scripts.
+## Key Design Notes
 
-\- Current focus: C15 (Yellow -> Blue).
+- Ball starts outside the cubes at the beginning of each turn.
 
+- Current dev order: Blue -> Red -> Green -> Yellow (temporary).
 
+- Future: shuffle can select any cube order; scripts must support any permutation.
 
-\## Key Design Notes
+## Key Rules
 
-\- Ball starts outside the cubes at the beginning of each turn.
+- Script-only operations (no manual Blender UI)
 
-\- Current dev order: Blue -> Red -> Green -> Yellow (temporary).
-
-\- Future: shuffle can select any cube order; scripts must support any permutation.
-
-
-
-\## Key Rules
-
-\- Script-only operations (no manual Blender UI)
-
-\- Commit after every confirmed working step
-
+- Commit after every confirmed working step
