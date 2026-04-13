@@ -85,6 +85,14 @@ def reset_scene_to_canonical():
 
     bpy.context.view_layer.update()
 
+    # Fix 2: explicit HRG stale-parent guard — a prior T02 run may leave HRG
+    # with a parent, causing wrong world positions for all children after attach().
+    hinge_rg = bpy.data.objects.get("Hinge_Red_Green")
+    if hinge_rg:
+        hinge_rg.parent = None
+        bpy.context.view_layer.update()
+        hinge_rg.location = (0.0, -0.51, 1.0)
+
     canonical = {
         "Cube_Blue":          ( 0.51,  0.0,  1.0),
         "Cube_Red":           ( 0.0,  -0.51, 1.0),
@@ -114,33 +122,55 @@ def reset_scene_to_canonical():
 # SECTION 3: Helpers
 ###############################################################################
 
-def _fcurves(obj):
+def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
+    """Set interpolation on keyframes nearest `frame` on matching fcurves.
+    Tries three accessors in order — covers Blender < 4.4 and 4.4+/5.x."""
     if not obj.animation_data or not obj.animation_data.action:
-        return []
-    act = obj.animation_data.action
+        return
+    action = obj.animation_data.action
+    fcurves = None
+
+    # Accessor 1: legacy direct fcurves (Blender < 4.4, or compat mode)
     try:
-        return act.fcurves
+        if action.fcurves:
+            fcurves = action.fcurves
     except AttributeError:
         pass
-    try:
-        return act.layers[0].strips[0].channelbag_for_slot(act.slots[0]).fcurves
-    except Exception:
-        pass
-    try:
-        return act.layers[0].strips[0].channelbags[0].fcurves
-    except Exception:
-        return []
+
+    # Accessor 2: slotted API — strip.channelbag_for_slot(slot)  (Blender 4.4+/5.x)
+    if fcurves is None:
+        try:
+            slot = action.slots[0]
+            strip = action.layers[0].strips[0]
+            bag = strip.channelbag_for_slot(slot)
+            if bag is not None:
+                fcurves = bag.fcurves
+        except Exception:
+            pass
+
+    # Accessor 3: direct channelbags index fallback
+    if fcurves is None:
+        try:
+            fcurves = action.layers[0].strips[0].channelbags[0].fcurves
+        except Exception:
+            pass
+
+    if fcurves is None:
+        print(f"WARNING: could not access fcurves on {obj.name} — interpolation not set")
+        return
+
+    for fc in fcurves:
+        if data_path in fc.data_path:
+            for kp in fc.keyframe_points:
+                if abs(kp.co[0] - frame) < 0.5:
+                    kp.interpolation = interp
 
 def key_rot(obj, axis, sign, frame, degrees, interp='LINEAR'):
     bpy.context.scene.frame_set(frame)
     obj.rotation_mode = 'XYZ'
     obj.rotation_euler[axis] = sign * math.radians(degrees)
     obj.keyframe_insert(data_path="rotation_euler", index=axis, frame=frame)
-    for fc in _fcurves(obj):
-        if "rotation_euler" in fc.data_path:
-            for kp in fc.keyframe_points:
-                if abs(kp.co[0] - frame) < 0.5:
-                    kp.interpolation = interp
+    set_last_keyframe_interpolation(obj, "rotation_euler", frame, interp)
 
 def key_influence(obj, con_name, frame, value):
     bpy.context.scene.frame_set(frame)
@@ -151,11 +181,7 @@ def key_influence(obj, con_name, frame, value):
     con.influence = value
     dp = f'constraints["{con_name}"].influence'
     obj.keyframe_insert(data_path=dp, frame=frame)
-    for fc in _fcurves(obj):
-        if con_name in fc.data_path:
-            for kp in fc.keyframe_points:
-                if abs(kp.co[0] - frame) < 0.5:
-                    kp.interpolation = 'CONSTANT'
+    set_last_keyframe_interpolation(obj, dp, frame, 'CONSTANT')
 
 ###############################################################################
 # SECTION 4: Animation
@@ -212,6 +238,24 @@ def run_animation():
     attach(blue,     red,      ( 0.51,  0.51, 0.0))
 
     print("Hierarchy: HRG(root) → [Green→HGY→Yellow] + [HBR→Red→Blue]")
+
+    # Fix 3: world-position verification after hierarchy build
+    bpy.context.view_layer.update()
+    _verify = {
+        "Cube_Green":         (-0.51,  0.0,  1.0),
+        "Hinge_Green_Yellow": (-0.51,  0.0,  1.0),
+        "Cube_Yellow":        (-0.51,  0.51, 1.0),
+        "Hinge_Blue_Red":     ( 0.51,  0.0,  1.0),
+        "Cube_Red":           ( 0.0,  -0.51, 1.0),
+        "Cube_Blue":          ( 0.51,  0.51, 1.0),
+    }
+    print("=== T3 Hierarchy World-Position Verification ===")
+    for _name, _expected in _verify.items():
+        _obj = bpy.data.objects.get(_name)
+        if _obj:
+            _actual = tuple(round(v, 3) for v in _obj.matrix_world.translation)
+            _ok = all(abs(_actual[i] - _expected[i]) < 0.02 for i in range(3))
+            print(f"  {'OK    ' if _ok else 'DETACH'} {_name}: actual={_actual}  expected={_expected}")
 
     # ── Remove rigid body from ball ──────────────────────────────────────────
     if ball.rigid_body:
@@ -299,6 +343,7 @@ def run_animation():
     print("Stage 2a (81–120):  Red  90° — Cube_Red rotates directly toward Yellow")
     print("Stage 2b (121–160): HRG  90° — whole system (confirmed correct)")
     print("Frame 161: ball transfers")
+    print("T03 Fix applied: channelbag accessor + HRG stale parent guard + verify block.")
     return True
 
 ###############################################################################
