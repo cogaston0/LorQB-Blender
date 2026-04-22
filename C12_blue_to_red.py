@@ -26,10 +26,67 @@ ROT_AXIS   = 0
 ROT_SIGN   = +1.0
 BALL_RADIUS = 0.25
 
-# Blue seat is defined in Cube_Blue LOCAL space — derived from Blue itself,
-# never guessed as a world constant. Red target remains world-based (verified).
-SEAT_BLUE_LOCAL = mathutils.Vector((0.0, 0.0, 0.25))
-SEAT_RED_WORLD  = mathutils.Vector((0.51, -0.51, 0.25))
+# ---- Four-Seat Contract (Z=0.5 cube center; LORQB_BALL_STATE_STANDARD.md §4) ----
+CANON_SEATS = {
+    "Seat_Blue":   (mathutils.Vector(( 0.51,  0.51, 0.5)), "Cube_Blue"),
+    "Seat_Red":    (mathutils.Vector(( 0.51, -0.51, 0.5)), "Cube_Red"),
+    "Seat_Green":  (mathutils.Vector((-0.51, -0.51, 0.5)), "Cube_Green"),
+    "Seat_Yellow": (mathutils.Vector((-0.51,  0.51, 0.5)), "Cube_Yellow"),
+}
+
+SEAT_RED_WORLD = CANON_SEATS["Seat_Red"][0]
+
+################################################################################
+# SECTION 1B: Four-Seat Contract helpers (shared block — identical in all scripts)
+################################################################################
+def ensure_four_seats():
+    """Create all four canonical seats at Z=0.5, parented to their cubes.
+    Removes any stale seat first. No substitute names."""
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        stale = bpy.data.objects.get(seat_name)
+        if stale:
+            bpy.data.objects.remove(stale, do_unlink=True)
+    bpy.context.view_layer.update()
+
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        cube = bpy.data.objects.get(cube_name)
+        if cube is None:
+            continue
+        seat = bpy.data.objects.new(seat_name, None)
+        seat.empty_display_type = 'SPHERE'
+        seat.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat)
+        seat.parent   = cube
+        seat.location = cube.matrix_world.inverted() @ world_vec
+    bpy.context.view_layer.update()
+
+def validate_four_seats(label):
+    """Report all four seats and their world translations. Returns True if all
+    four present AND each Z is 0.5 within tolerance."""
+    print(f"--- FOUR-SEAT REPORT [{label}] ---")
+    ok = True
+    for seat_name in ("Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"):
+        seat = bpy.data.objects.get(seat_name)
+        if seat is None:
+            print(f"  {seat_name}: <missing>  FAIL")
+            ok = False
+            continue
+        w = seat.matrix_world.translation
+        z_ok = abs(w.z - 0.5) <= 1e-3
+        tag = "OK" if z_ok else "FAIL(Z)"
+        if not z_ok:
+            ok = False
+        print(f"  {seat_name}: ({w.x:+.4f},{w.y:+.4f},{w.z:+.4f}) Z=0.5 {tag}")
+    print(f"--- FOUR-SEAT [{label}] → {'PASS' if ok else 'FAIL'} ---")
+    return ok
+
+def hard_fail_missing_seats():
+    """Raise by returning False on any missing canonical seat."""
+    missing = [n for n in CANON_SEATS if bpy.data.objects.get(n) is None]
+    if missing:
+        print("ABORT: missing canonical seats:", missing)
+        return False
+    return True
 
 ################################################################################
 # SECTION 2: RESET — Full scene reset to canonical state
@@ -79,20 +136,15 @@ def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
     if not obj.animation_data or not obj.animation_data.action:
         return
     action = obj.animation_data.action
-    fcurves = None
     try:
         fcurves = action.fcurves
     except AttributeError:
-        pass
-    if fcurves is None:
         try:
-            fcurves = action.layers[0].strips[0].channelbag_for_slot(action.slots[0]).fcurves
+            fcurves = action.layers[0].strips[0].channelbag_for_slot(
+                action.slots[0]
+            ).fcurves
         except Exception:
-            pass
-    if fcurves is None:
-        try:
-            fcurves = action.layers[0].strips[0].channelbags[0].fcurves
-        except Exception:
+            print(f"WARNING: Could not access fcurves for {obj.name} — skipping interpolation set")
             return
     for fc in fcurves:
         if fc.data_path == data_path or data_path in fc.data_path:
@@ -182,48 +234,16 @@ def setup_blue_to_red():
 
     bpy.context.view_layer.update()
 
-    # --- 7E: Create Seat_Blue empty parented to Cube_Blue ---
-    # Blue seat is anchored in Cube_Blue LOCAL space.
-    # Do NOT derive from Ball's scene position and do NOT use a guessed world constant.
-    # World position is computed from Blue's actual transform at frame 1.
-    bpy.context.scene.frame_set(F_START)
-    bpy.context.view_layer.update()
+    # --- 7E/7F: Four-Seat Contract — build ALL 4 canonical seats at Z=0.5 ---
+    ensure_four_seats()
+    if not validate_four_seats("after ensure_four_seats"):
+        print("ABORT: four-seat validation failed at build time.")
+        return False
+    if not hard_fail_missing_seats():
+        return False
 
-    seat_blue_world = blue.matrix_world @ SEAT_BLUE_LOCAL
-    print(f"Cube_Blue world pos:      {blue.matrix_world.translation[:]}")
-    print(f"Seat_Blue local (fixed):  {SEAT_BLUE_LOCAL[:]}")
-    print(f"Seat_Blue world (derived):{seat_blue_world[:]}")
-
-    seat_blue = bpy.data.objects.new("Seat_Blue", None)
-    seat_blue.empty_display_type = 'SPHERE'
-    seat_blue.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_blue)
-    seat_blue.parent = blue
-    seat_blue.location = SEAT_BLUE_LOCAL.copy()
-    print("Seat_Blue created inside Cube_Blue (local-space anchored).")
-
-    # --- 7E.1: Force Ball to derived Blue seat BEFORE constraints are keyed ---
-    # This guarantees frame 1 shows Ball inside Blue regardless of prior state.
-    ball.matrix_world.translation = seat_blue_world.copy()
-    bpy.context.view_layer.update()
-    print(f"Ball forced to Blue seat: {ball.matrix_world.translation[:]}")
-
-    # --- 7F: Create Seat_Red empty parented to Cube_Red ---
-    seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
-    print(f"Seat_Red world (target): {SEAT_RED_WORLD[:]}")
-    print(f"Seat_Red local (converted): {seat_red_local[:]}")
-
-    seat_red = bpy.data.objects.new("Seat_Red", None)
-    seat_red.empty_display_type = 'SPHERE'
-    seat_red.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_red)
-    seat_red.parent = red
-    seat_red.location = seat_red_local
-    print("Seat_Red created inside Cube_Red.")
-
-    bpy.context.view_layer.update()
-    print(f"Seat_Blue world actual: {seat_blue.matrix_world.translation[:]}")
-    print(f"Seat_Red  world actual: {seat_red.matrix_world.translation[:]}")
+    seat_blue = bpy.data.objects.get("Seat_Blue")
+    seat_red  = bpy.data.objects.get("Seat_Red")
 
     # --- 7G: Ball COPY_TRANSFORMS constraints ---
     latch_blue = ball.constraints.new(type='COPY_TRANSFORMS')
@@ -261,6 +281,8 @@ def setup_blue_to_red():
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
 
+    validate_four_seats("C12 final")
+
     print("=== C12 Complete: Blue → Red ===")
     print(f"Frames {F_START}–{F_END} | Transfer at frame {F_HOLD}→{F_SWAP}")
     print(f"ROT_SIGN: {ROT_SIGN} | Axis: X | Hinge: Hinge_Blue_Red")
@@ -270,16 +292,6 @@ def setup_blue_to_red():
 ################################################################################
 # SECTION 8: Blender UI Panel and Operator
 ################################################################################
-class LORQB_OT_ResetC12(bpy.types.Operator):
-    bl_idname  = "lorqb.reset_c12"
-    bl_label   = "Reset to Base"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        reset_scene_to_canonical()
-        self.report({'INFO'}, "Reset to base complete")
-        return {'FINISHED'}
-
 class LORQB_PT_C12Panel(bpy.types.Panel):
     bl_label       = "LorQB C12: Blue → Red"
     bl_idname      = "LORQB_PT_c12_panel"
@@ -289,9 +301,11 @@ class LORQB_PT_C12Panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator("lorqb.reset_c12", text="Reset to Base", icon='LOOP_BACK')
-        layout.separator()
-        layout.operator("lorqb.blue_to_red", text="Run C12: Blue → Red", icon='PLAY')
+        layout.operator("lorqb.blue_to_red", text="Run C12: Blue → Red", icon="CONSTRAINT")
+        col = layout.column(align=True)
+        col.label(text="Transfer: Frame 120 → 121 @ 180°")
+        col.separator()
+        col.label(text="● Blue → Red → Green → Yellow")
 
 class LORQB_OT_BlueToRed(bpy.types.Operator):
     bl_idname  = "lorqb.blue_to_red"
@@ -326,7 +340,6 @@ def _unregister_all_lorqb():
 
 def register():
     _unregister_all_lorqb()
-    bpy.utils.register_class(LORQB_OT_ResetC12)
     bpy.utils.register_class(LORQB_PT_C12Panel)
     bpy.utils.register_class(LORQB_OT_BlueToRed)
     print("\n" + "=" * 50)
@@ -341,10 +354,6 @@ def unregister():
         pass
     try:
         bpy.utils.unregister_class(LORQB_PT_C12Panel)
-    except Exception:
-        pass
-    try:
-        bpy.utils.unregister_class(LORQB_OT_ResetC12)
     except Exception:
         pass
 

@@ -47,6 +47,53 @@ HRG_DEG    = 90.0
 BALL_BLUE_INTERIOR   = mathutils.Vector(( 0.51,  0.51, 0.25))
 SEAT_GREEN_WORLD     = mathutils.Vector((-0.51, -0.51, 0.25))
 
+# ---- Four-Seat Contract (T-series start geometry; ball-interior Z=0.25) ----
+CANON_SEATS = {
+    "Seat_Blue":   (mathutils.Vector(( 0.51,  0.51, 0.25)), "Cube_Blue"),
+    "Seat_Red":    (mathutils.Vector(( 0.51, -0.51, 0.25)), "Cube_Red"),
+    "Seat_Green":  (mathutils.Vector((-0.51, -0.51, 0.25)), "Cube_Green"),
+    "Seat_Yellow": (mathutils.Vector((-0.51,  0.51, 0.25)), "Cube_Yellow"),
+}
+
+def ensure_four_seats():
+    for seat_name in CANON_SEATS:
+        stale = bpy.data.objects.get(seat_name)
+        if stale:
+            bpy.data.objects.remove(stale, do_unlink=True)
+    bpy.context.view_layer.update()
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        cube = bpy.data.objects.get(cube_name)
+        if cube is None:
+            continue
+        seat = bpy.data.objects.new(seat_name, None)
+        seat.empty_display_type = 'SPHERE'
+        seat.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat)
+        seat.parent   = cube
+        seat.location = cube.matrix_world.inverted() @ world_vec
+    bpy.context.view_layer.update()
+
+def validate_four_seats(label):
+    print(f"--- FOUR-SEAT REPORT [{label}] ---")
+    ok = True
+    for seat_name in ("Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"):
+        seat = bpy.data.objects.get(seat_name)
+        if seat is None:
+            print(f"  {seat_name}: <missing>  FAIL")
+            ok = False
+            continue
+        w = seat.matrix_world.translation
+        print(f"  {seat_name}: ({w.x:+.4f},{w.y:+.4f},{w.z:+.4f})  OK")
+    print(f"--- FOUR-SEAT [{label}] → {'PASS' if ok else 'FAIL'} ---")
+    return ok
+
+def hard_fail_missing_seats():
+    missing = [n for n in CANON_SEATS if bpy.data.objects.get(n) is None]
+    if missing:
+        print("ABORT: missing canonical seats:", missing)
+        return False
+    return True
+
 ###############################################################################
 # SECTION 2: Reset
 ###############################################################################
@@ -207,29 +254,21 @@ def run_animation():
     ball.keyframe_insert(data_path="location", frame=F_START)
     bpy.context.view_layer.update()
 
-    # ── Seats ────────────────────────────────────────────────────────────────
-    ball_world = ball.matrix_world.translation.copy()
+    # ── Four-Seat Contract — build ALL 4 canonical seats ─────────────────────
+    ensure_four_seats()
+    if not validate_four_seats("after ensure_four_seats"):
+        print("ABORT: four-seat validation failed at build time.")
+        return False
+    if not hard_fail_missing_seats():
+        return False
 
-    seat_blue_start = bpy.data.objects.new("Seat_Blue_Start", None)
-    seat_blue_start.empty_display_type = 'SPHERE'
-    seat_blue_start.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_blue_start)
-    seat_blue_start.parent   = blue
-    seat_blue_start.location = blue.matrix_world.inverted() @ ball_world
-
-    seat_green = bpy.data.objects.new("Seat_Green", None)
-    seat_green.empty_display_type = 'SPHERE'
-    seat_green.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_green)
-    seat_green.parent   = green
-    seat_green.location = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-
-    bpy.context.view_layer.update()
+    seat_blue  = bpy.data.objects.get("Seat_Blue")
+    seat_green = bpy.data.objects.get("Seat_Green")
 
     # ── Ball constraints ─────────────────────────────────────────────────────
     latch_blue = ball.constraints.new(type='COPY_TRANSFORMS')
-    latch_blue.name   = "Latch_Blue_Start"
-    latch_blue.target = seat_blue_start
+    latch_blue.name   = "Latch_Blue"
+    latch_blue.target = seat_blue
 
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name   = "Latch_Green"
@@ -252,18 +291,19 @@ def run_animation():
     key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_RET2_END, 0)
 
     # ── Ball transfer at frame 161 ───────────────────────────────────────────
-    key_influence(ball, "Latch_Blue_Start", F_START,   1.0)
-    key_influence(ball, "Latch_Green",      F_START,   0.0)
-    key_influence(ball, "Latch_Blue_Start", F_S2_END,  1.0)
-    key_influence(ball, "Latch_Green",      F_S2_END,  0.0)
-    key_influence(ball, "Latch_Blue_Start", F_SWAP,    0.0)
-    key_influence(ball, "Latch_Green",      F_SWAP,    1.0)
-    key_influence(ball, "Latch_Blue_Start", F_END,     0.0)
-    key_influence(ball, "Latch_Green",      F_END,     1.0)
+    key_influence(ball, "Latch_Blue",  F_START,   1.0)
+    key_influence(ball, "Latch_Green", F_START,   0.0)
+    key_influence(ball, "Latch_Blue",  F_S2_END,  1.0)
+    key_influence(ball, "Latch_Green", F_S2_END,  0.0)
+    key_influence(ball, "Latch_Blue",  F_SWAP,    0.0)
+    key_influence(ball, "Latch_Green", F_SWAP,    1.0)
+    key_influence(ball, "Latch_Blue",  F_END,     0.0)
+    key_influence(ball, "Latch_Green", F_END,     1.0)
 
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
+    validate_four_seats("T01 final")
 
     print("=== T1 Complete: Blue → Green ===")
     print("Stage 1 (1–80):    HBR 180° — Blue flips over Red")
@@ -316,6 +356,9 @@ _classes = [LORQB_OT_reset_t1, LORQB_OT_run_t1, LORQB_PT_t1_panel]
 ###############################################################################
 # SECTION 6: Register / Entry Point
 ###############################################################################
+
+def setup_blue_to_green():
+    return run_animation()
 
 def register():
     for name in ["LORQB_PT_t1_panel", "LORQB_OT_run_t1", "LORQB_OT_reset_t1"]:

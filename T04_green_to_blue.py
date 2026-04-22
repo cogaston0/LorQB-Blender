@@ -9,23 +9,23 @@
 #   HBR owns Blue opening directly in Stage 1.
 #
 # Three moves, no detachment:
-#   Stage 1  (  1– 80): HBR X ±180°     — Blue opens (sign verified at runtime)
-#   Stage 2a ( 81–120): Pivot_Green_HRG Y +90° — Green sweeps around HRG toward Blue
-#   Stage 2b (121–160): HRG Y −90°      — whole system rotates, Green lands on Blue
+#   Stage 1  (  1– 80): HBR X +180°            — Blue opens
+#   Stage 2a ( 81–120): Pivot_Green_HRG Y -90° — Green lift/approach
+#   Stage 2b (121–160): System_Rotator Y -90°  — whole-system deposit
 #   Frame 161:          Ball transfers Green → Blue
-#   Return   (162–200): HRG + Pivot_Green_HRG back to 0°
+#   Return   (162–200): System_Rotator + Pivot_Green_HRG back to 0°
 #   Return   (201–240): HBR back to 0°
 #
 # No detachment guarantee:
-#   HRG is the world root. Every cube, hinge, and pivot is a child.
+#   System_Rotator is the world root (set at frame 1, never re-parented).
+#   HRG is attached under System_Rotator. Every cube/hinge/pivot is a child.
 #   Rotations move the tree — no child is ever unparented mid-animation.
-#   Green rides on Pivot_Green_HRG whose center is HRG, so the Green/Red
-#   hinge edge stays coincident throughout Stage 2a.
 #
-# Hierarchy:
-#   HRG (root)
-#   ├── Red → HBR → Blue                        (Blue side)
-#   └── Pivot_Green_HRG → Green → HGY → Yellow  (Green side, HRG-pivoted)
+# Hierarchy (locked from frame 1):
+#   System_Rotator (root)
+#   └── HRG
+#       ├── Red → HBR → Blue                        (Blue side)
+#       └── Pivot_Green_HRG → Green → HGY → Yellow  (Green side)
 # ============================================================================
 
 import bpy
@@ -49,17 +49,18 @@ F_END      = 240
 # fix (per Rukmini directive item 7). Start with −1; invert to +1 if Blue
 # opens downward in test.
 HBR_AXIS   = 0       # X
-HBR_SIGN   = -1.0
+HBR_SIGN   = +1.0    # flipped from -1.0 per user 2026-04-22
 HBR_DEG    = 180.0
 
-# Stage 2a — Green: mirror of T03 Red (Y+90°). Y sign unchanged → Y+90°.
+# Stage 2a — Green lift direction confirmed by viewport at frame 91 (2026-04-22).
+# Previous mirror theory (GREEN_SIGN=-1) produced wrong direction; viewport reversed it.
 GREEN_AXIS = 1       # Y
 GREEN_SIGN = +1.0
 GREEN_DEG  = 90.0
 
 # Stage 2b — HRG: mirror of T03 HRG (Y−90°). Y sign unchanged → Y−90°.
 HRG_AXIS   = 1       # Y
-HRG_SIGN   = -1.0
+HRG_SIGN   = +1.0    # flipped from -1.0 per user 2026-04-22
 HRG_DEG    = 90.0
 
 # Ball world positions — Y-mirror of T03
@@ -79,10 +80,18 @@ def reset_scene_to_canonical():
     for name in ["Ball",
                  "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
                  "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
-                 "Pivot_Green_HRG"]:
+                 "Pivot_Green_HRG", "System_Rotator"]:
         obj = bpy.data.objects.get(name)
         if obj and obj.animation_data:
             obj.animation_data_clear()
+
+    # System_Rotator must return to canonical zero every run.
+    sr = bpy.data.objects.get("System_Rotator")
+    if sr:
+        sr.parent         = None
+        sr.rotation_mode  = 'XYZ'
+        sr.rotation_euler = (0.0, 0.0, 0.0)
+        sr.location       = (0.0, 0.0, 1.0)
 
     ball = bpy.data.objects.get("Ball")
     if ball:
@@ -216,22 +225,31 @@ def run_animation():
     hinge_br = bpy.data.objects.get("Hinge_Blue_Red")
     hinge_rg = bpy.data.objects.get("Hinge_Red_Green")
     hinge_gy = bpy.data.objects.get("Hinge_Green_Yellow")
+    system   = bpy.data.objects.get("System_Rotator")
 
     missing = [n for n, o in [
         ("Cube_Blue", blue), ("Cube_Red", red), ("Cube_Green", green),
         ("Cube_Yellow", yellow), ("Ball", ball),
         ("Hinge_Blue_Red", hinge_br), ("Hinge_Red_Green", hinge_rg),
         ("Hinge_Green_Yellow", hinge_gy),
+        ("System_Rotator", system),
     ] if o is None]
     if missing:
         print("ERROR: Missing:", missing)
         return False
 
-    # ── Zero hinges ──────────────────────────────────────────────────────────
+    # ── Zero hinges + System_Rotator ────────────────────────────────────────
     bpy.context.scene.frame_set(F_START)
     for h in (hinge_gy, hinge_rg, hinge_br):
         h.rotation_mode  = 'XYZ'
         h.rotation_euler = (0.0, 0.0, 0.0)
+    # System_Rotator: zero rotation, place at canonical center, parent = None
+    system.rotation_mode  = 'XYZ'
+    system.rotation_euler = (0.0, 0.0, 0.0)
+    system.location       = (0.0, 0.0, 1.0)
+    system.parent         = None
+    if system.animation_data:
+        system.animation_data_clear()
     bpy.context.view_layer.update()
 
     # ── Build hierarchy — HRG is world root ──────────────────────────────────
@@ -290,7 +308,15 @@ def run_animation():
     # Yellow world = (-0.51, 0, 1); HGY world = (-0.51, 0, 1) → local (0, 0, 0)
     attach(yellow,      hinge_gy,    ( 0.0,  0.0,  0.0))
 
-    print("Hierarchy: HRG(root) → [Red→HBR→Blue] + [Pivot_Green_HRG→Green→HGY→Yellow]")
+    # ── System_Rotator = TRUE ROOT (from frame 1) ───────────────────────────
+    # HRG was top of the subtree. Now attach HRG under System_Rotator so
+    # System_Rotator owns the entire T04 assembly before any animation runs.
+    # No mid-animation re-parenting — hierarchy is set once, here.
+    # System_Rotator is at world (0, 0, 1). HRG is at (0, -0.51, 1).
+    # Local offset of HRG under System_Rotator = (0, -0.51, 0).
+    attach(hinge_rg, system, (0.0, -0.51, 0.0))
+
+    print("Hierarchy: System_Rotator(root) → HRG → [Red→HBR→Blue] + [Pivot_Green_HRG→Green→HGY→Yellow]")
 
     # World-position verification after hierarchy build
     bpy.context.view_layer.update()
@@ -380,15 +406,20 @@ def run_animation():
     key_rot(pivot_green_obj, GREEN_AXIS, GREEN_SIGN, F_RET1_END, 0)
     key_rot(pivot_green_obj, GREEN_AXIS, GREEN_SIGN, F_RET2_END, 0)
 
-    # ── Stage 2b — HRG Y −90° (whole system) ────────────────────────────────
-    # Mirror of T03 Stage 2b (HRG Y−90°). Y sign unchanged — identical to T03.
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_START,    0)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S1_END,   0)          # hold during Stage 1
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2A_END,  0)          # hold during Stage 2a
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_S2_END,   HRG_DEG)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_SWAP,     HRG_DEG)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_RET1_END, 0)
-    key_rot(hinge_rg, HRG_AXIS, HRG_SIGN, F_RET2_END, 0)
+    # ── Stage 2b — System_Rotator Y -90° (whole-system deposit) ─────────────
+    # Per T04 FINAL EXECUTION CONTRACT (user directive 2026-04-22):
+    # Stage 2b uses System_Rotator, NOT HRG. HRG stays at 0° through the
+    # whole animation in T04 (only System_Rotator moves in Stage 2b).
+    SYSTEM_AXIS = 1       # Y
+    SYSTEM_SIGN = +1.0    # flipped from -1.0 per viewport 2026-04-22
+    SYSTEM_DEG  = 90.0
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_START,    0)
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_S1_END,   0)          # hold during Stage 1
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_S2A_END,  0)          # hold during Stage 2a
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_S2_END,   SYSTEM_DEG)
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_SWAP,     SYSTEM_DEG)
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_RET1_END, 0)
+    key_rot(system, SYSTEM_AXIS, SYSTEM_SIGN, F_RET2_END, 0)
 
     # ── Ball transfer at frame 161 ───────────────────────────────────────────
     key_influence(ball, "Latch_Green_Start", F_START,   1.0)
@@ -405,11 +436,11 @@ def run_animation():
     bpy.context.scene.frame_set(F_START)
 
     print("=== T4 Complete: Green → Blue ===")
-    print(f"Stage 1  (1–80):    HBR X {HBR_SIGN:+.0f}*{HBR_DEG:.0f}° — Blue opens (VERIFY SIGN)")
-    print("Stage 2a (81–120):  Pivot_Green_HRG Y+90° — Green sweeps around HRG")
-    print("Stage 2b (121–160): HRG Y−90°  — whole system")
+    print(f"Stage 1  (1–80):    HBR X {HBR_SIGN:+.0f}*{HBR_DEG:.0f}° — Blue opens")
+    print(f"Stage 2a (81–120):  Pivot_Green_HRG Y {GREEN_SIGN:+.0f}*{GREEN_DEG:.0f}° — Green lift")
+    print("Stage 2b (121–160): System_Rotator Y -90° — whole-system deposit")
     print("Frame 161: ball transfers Green → Blue")
-    print("Return  (162–200): HRG + Pivot_Green_HRG → 0°")
+    print("Return  (162–200): System_Rotator + Pivot_Green_HRG → 0°")
     print("Return  (201–240): HBR → 0°")
     return True
 
@@ -458,6 +489,9 @@ _classes = [LORQB_OT_reset_t4, LORQB_OT_run_t4, LORQB_PT_t4_panel]
 ###############################################################################
 # SECTION 6: Register / Entry Point
 ###############################################################################
+
+def setup_green_to_blue():
+    return run_animation()
 
 def register():
     for name in ["LORQB_PT_t4_panel", "LORQB_OT_run_t4", "LORQB_OT_reset_t4"]:

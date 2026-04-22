@@ -1,14 +1,13 @@
 # ============================================================================
 # T02_yellow_to_red.py  (Blender 5.0.1)
-# T2 — Yellow → Red (diagonal)
+# T2 — Yellow → Red (diagonal, 2-stage per LORQB_T_SERIES_MOVE_SPEC.md)
 #
-# Ball path:
-#   Frame   1: Ball at Yellow bottom (Seat_Yellow_Start = ball world pos, no jump)
-#   Frame   1–80:  Stage 1 — Hinge_Green_Yellow rotates 0°→180° (Yellow flips)
-#   Frame  81–160: Stage 2 — Hinge_Red_Green rotates 0°→90° (Yellow over Red)
-#   Frame 161:     Ball transfers from Seat_Yellow_Start to Seat_Red
-#   Frame 162–200: Stage 3 — Hinge_Red_Green returns 90°→0° FIRST
-#   Frame 201–240: Stage 4 — Hinge_Green_Yellow returns 180°→0° SECOND
+# Motion:
+#   Stage 1 (F_START → F_MID):  HGY +180° on X  — Yellow flips
+#   Stage 2 (F_MID   → F_HOLD): HRG  -90° on Y  — Green+Yellow over Red
+#   F_HOLD → F_SWAP:  ball transfers Yellow → Red via latch switch
+#   F_SWAP → F_RET → F_END: motion reverses (HRG back, then HGY back)
+# Hierarchy: HRG → Green → HGY → Yellow  (Red stays fixed, no re-parenting)
 # ============================================================================
 
 import bpy
@@ -20,21 +19,67 @@ import mathutils
 ###############################################################################
 
 F_START        = 1
-F_S1_END       = 80    # Hinge_Green_Yellow reaches 180° — Yellow fully flipped
-F_S2_END       = 160   # Hinge_Red_Green reaches 90° — Yellow over Red
-F_SWAP         = 161   # Ball transfers from Seat_Yellow_Start to Seat_Red
-F_RET1_END     = 200   # Hinge_Red_Green returns 90°→0° FIRST
-F_RET2_END     = 240   # Hinge_Green_Yellow returns 180°→0° SECOND
-F_END          = 240
+F_MID          = 60    # HGY reaches +180° on X — Yellow flipped
+F_HOLD         = 120   # HRG reaches -90°  on Y — Yellow above Red, aligned
+F_SWAP         = 121   # Ball transfers Yellow → Red
+F_RET          = 180   # HRG returns to 0°
+F_END          = 240   # HGY returns to 0°
 
-ROT_SIGN_1     = +1.0  # TODO: Hinge_Green_Yellow — verify sign in Blender
-ROT_SIGN_2     = +1.0  # TODO: Hinge_Red_Green   — verify sign in Blender
+# Axis + sign per LORQB_T_SERIES_MOVE_SPEC.md (T02 row, final)
+ROT_SIGN_HGY   = +1.0  # HGY X-axis, +180°
+ROT_SIGN_HRG   = +1.0  # HRG Y-axis, +90°
+AXIS_HGY       = 0     # X
+AXIS_HRG       = 1     # Y
 
-# Red bottom interior center
+# Red bottom interior center (destination seat target)
 SEAT_RED_WORLD = mathutils.Vector((0.51, -0.51, 0.25))
 
-# Seat_Yellow_Start is NOT hardcoded — built from ball.matrix_world at runtime
-# This prevents the jump-on-arm.
+# ---- Four-Seat Contract (T-series start geometry; ball-interior Z=0.25) ----
+CANON_SEATS = {
+    "Seat_Blue":   (mathutils.Vector(( 0.51,  0.51, 0.25)), "Cube_Blue"),
+    "Seat_Red":    (mathutils.Vector(( 0.51, -0.51, 0.25)), "Cube_Red"),
+    "Seat_Green":  (mathutils.Vector((-0.51, -0.51, 0.25)), "Cube_Green"),
+    "Seat_Yellow": (mathutils.Vector((-0.51,  0.51, 0.25)), "Cube_Yellow"),
+}
+
+def ensure_four_seats():
+    for seat_name in CANON_SEATS:
+        stale = bpy.data.objects.get(seat_name)
+        if stale:
+            bpy.data.objects.remove(stale, do_unlink=True)
+    bpy.context.view_layer.update()
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        cube = bpy.data.objects.get(cube_name)
+        if cube is None:
+            continue
+        seat = bpy.data.objects.new(seat_name, None)
+        seat.empty_display_type = 'SPHERE'
+        seat.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat)
+        seat.parent   = cube
+        seat.location = cube.matrix_world.inverted() @ world_vec
+    bpy.context.view_layer.update()
+
+def validate_four_seats(label):
+    print(f"--- FOUR-SEAT REPORT [{label}] ---")
+    ok = True
+    for seat_name in ("Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"):
+        seat = bpy.data.objects.get(seat_name)
+        if seat is None:
+            print(f"  {seat_name}: <missing>  FAIL")
+            ok = False
+            continue
+        w = seat.matrix_world.translation
+        print(f"  {seat_name}: ({w.x:+.4f},{w.y:+.4f},{w.z:+.4f})  OK")
+    print(f"--- FOUR-SEAT [{label}] → {'PASS' if ok else 'FAIL'} ---")
+    return ok
+
+def hard_fail_missing_seats():
+    missing = [n for n in CANON_SEATS if bpy.data.objects.get(n) is None]
+    if missing:
+        print("ABORT: missing canonical seats:", missing)
+        return False
+    return True
 
 ###############################################################################
 # SECTION 2: Full Scene Reset
@@ -61,20 +106,51 @@ def reset_scene_to_canonical():
     if ball:
         ball.constraints.clear()
 
-    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
-        hinge = bpy.data.objects.get(hinge_name)
-        if hinge:
-            hinge.rotation_mode = 'XYZ'
-            hinge.rotation_euler = (0.0, 0.0, 0.0)
-
     for seat_name in ["Seat_Yellow_Start",
                       "Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
+    bpy.context.view_layer.update()
+
+    # Unparent all cubes + hinges, clear constraints.
+    for name in ("Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+                 "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"):
+        obj = bpy.data.objects.get(name)
+        if obj:
+            obj.parent = None
+            obj.matrix_parent_inverse = mathutils.Matrix.Identity(4)
+            for con in list(obj.constraints):
+                obj.constraints.remove(con)
+    bpy.context.view_layer.update()
+
+    # Restore canonical world positions (C10 origin-aware placement).
+    CANON_CUBES_T02 = {
+        "Cube_Blue":   mathutils.Vector(( 0.51,  0.00, 1.0)),
+        "Cube_Red":    mathutils.Vector(( 0.00, -0.51, 1.0)),
+        "Cube_Green":  mathutils.Vector((-0.51,  0.00, 1.0)),
+        "Cube_Yellow": mathutils.Vector((-0.51,  0.00, 1.0)),
+    }
+    CANON_HINGES_T02 = {
+        "Hinge_Blue_Red":     mathutils.Vector(( 0.51,  0.00, 1.0)),
+        "Hinge_Red_Green":    mathutils.Vector(( 0.00, -0.51, 1.0)),
+        "Hinge_Green_Yellow": mathutils.Vector((-0.51,  0.00, 1.0)),
+    }
+    for name, loc in CANON_CUBES_T02.items():
+        obj = bpy.data.objects.get(name)
+        if obj:
+            obj.location       = (loc.x, loc.y, loc.z)
+            obj.rotation_mode  = 'XYZ'
+            obj.rotation_euler = (0.0, 0.0, 0.0)
+    for name, loc in CANON_HINGES_T02.items():
+        obj = bpy.data.objects.get(name)
+        if obj:
+            obj.location       = (loc.x, loc.y, loc.z)
+            obj.rotation_mode  = 'XYZ'
+            obj.rotation_euler = (0.0, 0.0, 0.0)
 
     bpy.context.view_layer.update()
-    print("=== Scene reset to canonical state ===")
+    print("=== T2 reset: full canonical restore (4 cubes + 3 hinges) ===")
 
 ###############################################################################
 # SECTION 3: Helpers
@@ -153,12 +229,13 @@ def run_animation():
     bpy.context.view_layer.update()
 
     # ── Hierarchy ──────────────────────────────────────────────────────────
-    # Yellow → Hinge_Green_Yellow → Green → Hinge_Red_Green
-    # Red has NO parent — stays fixed throughout
-    parent_preserve_world(yellow, hinge1)
-    parent_preserve_world(hinge1, green)
-    parent_preserve_world(green,  hinge2)
-    print("Hierarchy set: Yellow→H1→Green→H2  (Red unparented)")
+    # Full chain so HGY stays mechanically attached while HRG rotates:
+    #   HRG → Green → HGY → Yellow
+    # Red stays fixed (anchored by HBR which does not rotate).
+    parent_preserve_world(green,  hinge2)   # Green rides HRG
+    parent_preserve_world(hinge1, green)    # HGY rides Green
+    parent_preserve_world(yellow, hinge1)   # Yellow rides HGY
+    print("Hierarchy set: HRG→Green→HGY→Yellow  (Red fixed)")
 
     # ── Remove rigid body from ball ────────────────────────────────────────
     if ball.rigid_body:
@@ -178,69 +255,48 @@ def run_animation():
     bpy.context.view_layer.update()
     print("Ball moved to Yellow bottom interior center (-0.51, 0.51, 0.25).")
 
-    # ── Seat_Yellow_Start ─────────────────────────────────────────────────
-    # Built from ball's ACTUAL world position — no jump on arm.
-    # Ball rides this seat through Stage 1 and Stage 2, then transfers
-    # directly to Seat_Red at F_SWAP.
-    ball_world           = ball.matrix_world.translation.copy()
-    seat_start_local     = yellow.matrix_world.inverted() @ ball_world
-    seat_yellow_start    = bpy.data.objects.new("Seat_Yellow_Start", None)
-    seat_yellow_start.empty_display_type = 'SPHERE'
-    seat_yellow_start.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_yellow_start)
-    seat_yellow_start.parent   = yellow
-    seat_yellow_start.location = seat_start_local
-    print(f"Seat_Yellow_Start at ball world pos {ball_world} (no jump).")
+    # ── Four-Seat Contract — build ALL 4 canonical seats ─────────────────────
+    ensure_four_seats()
+    if not validate_four_seats("after ensure_four_seats"):
+        print("ABORT: four-seat validation failed at build time.")
+        return False
+    if not hard_fail_missing_seats():
+        return False
 
-    # ── Seat_Red ──────────────────────────────────────────────────────────
-    # Bottom interior center of Red. Ball lands here at F_SWAP.
-    seat_red_local       = red.matrix_world.inverted() @ SEAT_RED_WORLD
-    seat_red             = bpy.data.objects.new("Seat_Red", None)
-    seat_red.empty_display_type = 'SPHERE'
-    seat_red.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_red)
-    seat_red.parent   = red
-    seat_red.location = seat_red_local
-    print(f"Seat_Red at world {SEAT_RED_WORLD} (bottom center of Red).")
-
-    bpy.context.view_layer.update()
+    seat_yellow = bpy.data.objects.get("Seat_Yellow")
+    seat_red    = bpy.data.objects.get("Seat_Red")
 
     # ── Constraints ────────────────────────────────────────────────────────
-    latch_start = ball.constraints.new(type='COPY_TRANSFORMS')
-    latch_start.name   = "Latch_Yellow_Start"
-    latch_start.target = seat_yellow_start
+    latch_yellow = ball.constraints.new(type='COPY_TRANSFORMS')
+    latch_yellow.name   = "Latch_Yellow"
+    latch_yellow.target = seat_yellow
 
     latch_red = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_red.name   = "Latch_Red"
     latch_red.target = seat_red
-    print("Latch_Yellow_Start and Latch_Red created.")
+    print("Latch_Yellow and Latch_Red created.")
 
-    # ── Hinge keyframes ────────────────────────────────────────────────────
+    # ── Hinge keyframes (two-stage diagonal per spec) ──────────────────────
+    # Stage 1 (F_START → F_MID):  HGY 0° → +180° on X
+    # Stage 2 (F_MID   → F_HOLD): HRG 0° → -90°  on Y
+    # Hold    (F_HOLD  → F_SWAP): both held
+    # Return 1(F_SWAP  → F_RET):  HRG -90° → 0°
+    # Return 2(F_RET   → F_END):  HGY +180° → 0°
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_START,   0)
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_MID,   180)
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_HOLD,  180)
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_SWAP,  180)
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_RET,   180)
+    key_rot(hinge1, AXIS_HGY, ROT_SIGN_HGY, F_END,     0)
 
-    # Hinge_Green_Yellow (X-axis):
-    #   Stage 1:  0°→180°  (frames  1–80)
-    #   Hold:    180°       (frames 80–200) — waits for H2 to retract
-    #   Stage 4: 180°→0°   (frames 201–240)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_START,      0)   # TODO: axis 0 = X — verify
-    key_rot(hinge1, 0, ROT_SIGN_1, F_S1_END,   180)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_S2_END,   180)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_SWAP,     180)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_RET1_END, 180)
-    key_rot(hinge1, 0, ROT_SIGN_1, F_RET2_END,   0)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_START,   0)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_MID,     0)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_HOLD,   90)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_SWAP,   90)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_RET,     0)
+    key_rot(hinge2, AXIS_HRG, ROT_SIGN_HRG, F_END,     0)
 
-    # Hinge_Red_Green (Y-axis):
-    #   Stage 2:  0°→90°   (frames  81–160)
-    #   Hold:     90°       (frames 160–161)
-    #   Stage 3:  90°→0°   (frames 162–200) — retracts FIRST
-    #   Hold:      0°       (frames 200–240)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_START,      0)   # TODO: axis 1 = Y — verify
-    key_rot(hinge2, 1, ROT_SIGN_2, F_S1_END,     0)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_S2_END,    90)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_SWAP,      90)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_RET1_END,   0)
-    key_rot(hinge2, 1, ROT_SIGN_2, F_RET2_END,   0)
-
-    print("Hinge keyframes set.")
+    print("HGY keyframes: 0→180→0 on X. HRG keyframes: 0→-90→0 on Y.")
 
     # ── Ball constraint influences ─────────────────────────────────────────
     #
@@ -249,23 +305,24 @@ def run_animation():
     #
     # All use CONSTANT interpolation — switches are intentional, not jumps.
 
-    # Latch_Yellow_Start
-    key_influence(ball, "Latch_Yellow_Start", F_START,       1.0)
-    key_influence(ball, "Latch_Yellow_Start", F_S2_END,      1.0)  # still on through Stage 2
-    key_influence(ball, "Latch_Yellow_Start", F_SWAP,        0.0)  # off at 161
-    key_influence(ball, "Latch_Yellow_Start", F_END,         0.0)
+    # Latch_Yellow
+    key_influence(ball, "Latch_Yellow", F_START, 1.0)
+    key_influence(ball, "Latch_Yellow", F_HOLD,  1.0)
+    key_influence(ball, "Latch_Yellow", F_SWAP,  0.0)
+    key_influence(ball, "Latch_Yellow", F_END,   0.0)
 
     # Latch_Red
-    key_influence(ball, "Latch_Red",          F_START,       0.0)
-    key_influence(ball, "Latch_Red",          F_S2_END,      0.0)  # still off through Stage 2
-    key_influence(ball, "Latch_Red",          F_SWAP,        1.0)  # on at 161
-    key_influence(ball, "Latch_Red",          F_END,         1.0)
+    key_influence(ball, "Latch_Red",    F_START, 0.0)
+    key_influence(ball, "Latch_Red",    F_HOLD,  0.0)
+    key_influence(ball, "Latch_Red",    F_SWAP,  1.0)
+    key_influence(ball, "Latch_Red",    F_END,   1.0)
 
-    print("Influences keyed — Yellow_Start→Red at frame 161.")
+    print(f"Influences keyed — Yellow→Red at frame {F_SWAP}.")
 
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
+    validate_four_seats("T02 final")
 
     print("=== T2 Complete: Yellow → Red ===")
     return True
@@ -288,7 +345,7 @@ class LORQB_OT_reset_t2(bpy.types.Operator):
 class LORQB_OT_run_t2(bpy.types.Operator):
     bl_idname      = "lorqb.run_t2"
     bl_label       = "Run T2: Yellow → Red"
-    bl_description = "Arm T2 animation: Yellow transfers ball to Red"
+    bl_description = "Arm T2 animation: Yellow transfers ball to Red (diagonal)"
 
     def execute(self, context):
         result = run_animation()
@@ -314,6 +371,9 @@ class LORQB_PT_t2_panel(bpy.types.Panel):
 
 
 _classes = [LORQB_OT_reset_t2, LORQB_OT_run_t2, LORQB_PT_t2_panel]
+
+def setup_yellow_to_red():
+    return run_animation()
 
 def register():
     for cls in _classes:

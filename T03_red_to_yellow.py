@@ -42,11 +42,11 @@ HGY_SIGN   = +1.0
 HGY_DEG    = 180.0
 
 RED_AXIS   = 1       # Y-axis — tips Red opening toward Yellow; flip sign if wrong
-RED_SIGN   = +1.0
+RED_SIGN   = -1.0
 RED_DEG    = 90.0
 
 HRG_AXIS   = 1       # Y-axis — confirmed correct direction
-HRG_SIGN   = -1.0
+HRG_SIGN   = -1.0    # flipped from +1.0 per user 2026-04-22
 HRG_DEG    = 90.0
 
 BALL_RED_INTERIOR      = mathutils.Vector(( 0.51, -0.51, 0.25))
@@ -391,6 +391,9 @@ _classes = [LORQB_OT_reset_t3, LORQB_OT_run_t3, LORQB_PT_t3_panel]
 ###############################################################################
 # SECTION 6: Register / Entry Point
 ###############################################################################
+
+def setup_red_to_yellow():
+    return run_animation()
 
 def register():
     for name in ["LORQB_OT_t3_stage1", "LORQB_OT_t3_stage2a", "LORQB_OT_t3_stage2b",

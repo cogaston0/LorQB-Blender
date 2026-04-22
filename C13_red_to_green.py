@@ -1,7 +1,7 @@
 # ============================================================================
 # C13_red_to_green.py  (Blender 5.0.1)
 # C13 — Red → Green
-# Frames 241 – 480 | Transfer at frame 360 → 361
+# Frames 1 – 240 | Transfer at frame 120 → 121
 # Chain: Blue — Red — Green — Yellow
 # Hinge: Hinge_Red_Green (Y-axis rotation, ROT_SIGN = -1.0)
 # Ball rides Cube_Red (Latch_Red) → drops into Cube_Green (Latch_Green)
@@ -15,18 +15,73 @@ import mathutils
 ################################################################################
 # SECTION 1: Constants
 ################################################################################
-F_START = 241   # Start: Red at 0°, ball in Red
-F_MID   = 300   # Mid:   Red at 90°
-F_HOLD  = 360   # Hold:  Red at 180° — ball aligned above Green
-F_SWAP  = 361   # Swap:  ball transfers from Latch_Red to Latch_Green
-F_RET   = 420   # Return: Red at 90° on way back
-F_END   = 480   # End:   Red at 0°, ball in Green
+F_START = 1     # Start: Red at 0°, ball in Red
+F_MID   = 60    # Mid:   Red at 90°
+F_HOLD  = 120   # Hold:  Red at 180° — ball aligned above Green
+F_SWAP  = 121   # Swap:  ball transfers from Latch_Red to Latch_Green
+F_RET   = 180   # Return: Red at 90° on way back
+F_END   = 240   # End:   Red at 0°, ball in Green
 
 ROT_AXIS = 1        # Y-axis index in rotation_euler
 ROT_SIGN = -1.0     # Negative Y rotation swings Red correctly over Green
 
-SEAT_RED_WORLD   = mathutils.Vector((0.51,  -0.51, 0.25))
-SEAT_GREEN_WORLD = mathutils.Vector((-0.51, -0.51, 0.25))
+# ---- Four-Seat Contract (Z=0.5 cube center; LORQB_BALL_STATE_STANDARD.md §4) ----
+CANON_SEATS = {
+    "Seat_Blue":   (mathutils.Vector(( 0.51,  0.51, 0.5)), "Cube_Blue"),
+    "Seat_Red":    (mathutils.Vector(( 0.51, -0.51, 0.5)), "Cube_Red"),
+    "Seat_Green":  (mathutils.Vector((-0.51, -0.51, 0.5)), "Cube_Green"),
+    "Seat_Yellow": (mathutils.Vector((-0.51,  0.51, 0.5)), "Cube_Yellow"),
+}
+
+SEAT_RED_WORLD   = CANON_SEATS["Seat_Red"][0]
+SEAT_GREEN_WORLD = CANON_SEATS["Seat_Green"][0]
+
+################################################################################
+# SECTION 1B: Four-Seat Contract helpers (shared block — identical in all scripts)
+################################################################################
+def ensure_four_seats():
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        stale = bpy.data.objects.get(seat_name)
+        if stale:
+            bpy.data.objects.remove(stale, do_unlink=True)
+    bpy.context.view_layer.update()
+
+    for seat_name, (world_vec, cube_name) in CANON_SEATS.items():
+        cube = bpy.data.objects.get(cube_name)
+        if cube is None:
+            continue
+        seat = bpy.data.objects.new(seat_name, None)
+        seat.empty_display_type = 'SPHERE'
+        seat.empty_display_size = 0.08
+        bpy.context.scene.collection.objects.link(seat)
+        seat.parent   = cube
+        seat.location = cube.matrix_world.inverted() @ world_vec
+    bpy.context.view_layer.update()
+
+def validate_four_seats(label):
+    print(f"--- FOUR-SEAT REPORT [{label}] ---")
+    ok = True
+    for seat_name in ("Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"):
+        seat = bpy.data.objects.get(seat_name)
+        if seat is None:
+            print(f"  {seat_name}: <missing>  FAIL")
+            ok = False
+            continue
+        w = seat.matrix_world.translation
+        z_ok = abs(w.z - 0.5) <= 1e-3
+        tag = "OK" if z_ok else "FAIL(Z)"
+        if not z_ok:
+            ok = False
+        print(f"  {seat_name}: ({w.x:+.4f},{w.y:+.4f},{w.z:+.4f}) Z=0.5 {tag}")
+    print(f"--- FOUR-SEAT [{label}] → {'PASS' if ok else 'FAIL'} ---")
+    return ok
+
+def hard_fail_missing_seats():
+    missing = [n for n in CANON_SEATS if bpy.data.objects.get(n) is None]
+    if missing:
+        print("ABORT: missing canonical seats:", missing)
+        return False
+    return True
 
 ################################################################################
 # SECTION 2: RESET — Full scene reset to canonical state
@@ -38,28 +93,52 @@ def reset_scene_to_canonical():
         "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
     ]
 
+    # 1. Clear animation data
     for name in all_names:
         obj = bpy.data.objects.get(name)
         if obj and obj.animation_data:
             obj.animation_data_clear()
 
+    # 2. Clear ball constraints
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
-    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
-        hinge = bpy.data.objects.get(hinge_name)
-        if hinge:
-            hinge.rotation_mode = 'XYZ'
-            hinge.rotation_euler = (0.0, 0.0, 0.0)
-
+    # 3. Remove stale seats
     for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
+    bpy.context.view_layer.update()
+
+    # 4. Unparent all cubes + hinges, clear their constraints
+    for name in ("Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+                 "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"):
+        obj = bpy.data.objects.get(name)
+        if obj:
+            obj.parent = None
+            obj.matrix_parent_inverse = mathutils.Matrix.Identity(4)
+            for con in list(obj.constraints):
+                obj.constraints.remove(con)
+
+    # 5. Neutralize System_Rotator if present (T-series contamination)
+    sysrot = bpy.data.objects.get("System_Rotator")
+    if sysrot:
+        if sysrot.animation_data:
+            sysrot.animation_data_clear()
+        sysrot.rotation_mode  = 'XYZ'
+        sysrot.rotation_euler = (0.0, 0.0, 0.0)
+        sysrot.location       = (0.0, 0.0, 0.0)
+
+    # 6. Zero all 3 hinges
+    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        hinge = bpy.data.objects.get(hinge_name)
+        if hinge:
+            hinge.rotation_mode  = 'XYZ'
+            hinge.rotation_euler = (0.0, 0.0, 0.0)
 
     bpy.context.view_layer.update()
-    print("=== Scene reset to canonical state ===")
+    print("=== Scene reset to canonical state (C13 hardened) ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -163,33 +242,16 @@ def setup_red_to_green():
 
     bpy.context.view_layer.update()
 
-    seat_red_local = red.matrix_world.inverted() @ SEAT_RED_WORLD
-    print(f"Seat_Red world (target): {SEAT_RED_WORLD[:]}")
-    print(f"Seat_Red local (converted): {seat_red_local[:]}")
+    # --- Four-Seat Contract — build ALL 4 canonical seats at Z=0.5 ---
+    ensure_four_seats()
+    if not validate_four_seats("after ensure_four_seats"):
+        print("ABORT: four-seat validation failed at build time.")
+        return False
+    if not hard_fail_missing_seats():
+        return False
 
-    seat_red = bpy.data.objects.new("Seat_Red", None)
-    seat_red.empty_display_type = 'SPHERE'
-    seat_red.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_red)
-    seat_red.parent = red
-    seat_red.location = seat_red_local
-    print("Seat_Red created inside Cube_Red.")
-
-    seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
-    print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
-    print(f"Seat_Green local (converted): {seat_green_local[:]}")
-
-    seat_green = bpy.data.objects.new("Seat_Green", None)
-    seat_green.empty_display_type = 'SPHERE'
-    seat_green.empty_display_size = 0.08
-    bpy.context.scene.collection.objects.link(seat_green)
-    seat_green.parent = green
-    seat_green.location = seat_green_local
-    print("Seat_Green created inside Cube_Green.")
-
-    bpy.context.view_layer.update()
-    print(f"Seat_Red   world actual: {seat_red.matrix_world.translation[:]}")
-    print(f"Seat_Green world actual: {seat_green.matrix_world.translation[:]}")
+    seat_red   = bpy.data.objects.get("Seat_Red")
+    seat_green = bpy.data.objects.get("Seat_Green")
 
     latch_red = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_red.name = "Latch_Red"
@@ -223,6 +285,8 @@ def setup_red_to_green():
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
 
+    validate_four_seats("C13 final")
+
     print("=== C13 Complete: Red → Green ===")
     print(f"Frames {F_START}–{F_END} | Transfer at frame {F_HOLD}→{F_SWAP}")
     print(f"ROT_SIGN: {ROT_SIGN} | Axis: Y | Hinge: Hinge_Red_Green")
@@ -253,7 +317,11 @@ class LORQB_PT_C13Panel(bpy.types.Panel):
         layout = self.layout
         layout.operator("lorqb.reset_c13", text="Reset to Base", icon='LOOP_BACK')
         layout.separator()
-        layout.operator("lorqb.red_to_green", text="Run C13: Red → Green", icon='PLAY')
+        layout.operator("lorqb.red_to_green", text="Run C13: Red → Green", icon="CONSTRAINT")
+        col = layout.column(align=True)
+        col.label(text="Transfer: Frame 360 → 361 @ 180°")
+        col.separator()
+        col.label(text="Blue rides Red — passive carry")
 
 class LORQB_OT_RedToGreen(bpy.types.Operator):
     bl_idname  = "lorqb.red_to_green"
