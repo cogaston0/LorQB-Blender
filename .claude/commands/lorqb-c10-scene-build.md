@@ -5,6 +5,10 @@
 Running it clears the Blender scene and rebuilds everything from scratch:
 4 hollow cubes, 1 ball, 3 hinges, and 4 seat empties.
 
+> **CONSTRUCTION ONLY — no keyframes, no animation, nothing moves.**
+> If nothing moves after running C10, that is correct behavior.
+> Motion begins at C12. See the execution order at the bottom of this file.
+
 ---
 
 ## Scene topology (permanent constraint — never change)
