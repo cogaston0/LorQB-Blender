@@ -27,33 +27,38 @@ Repo: `cogaston0/lorqb-blender` | Branch: `claude/organize-lorqb-skills-3UOBD`
 
 ### C Series — Movement only (C12 → C13 → C14 → C15)
 
-Each C-series movement script dissects into the same 4 components:
+Each movement has a **forward script** and a **_REV (return to base)** script.
+Every row pair shares the same 3 subagents; Agent 3 (`return-to-base`) owns the _REV artifact.
 
-| Component   | C12                        | C13                        | C14                          | C15                          |
-|-------------|----------------------------|----------------------------|------------------------------|------------------------------|
-| Transition  | Blue → Red                 | Red → Green                | Green → Yellow               | Yellow → Blue                |
-| Skill       | `/lorqb-c12-blue-to-red`   | `/lorqb-c13-red-to-green`  | `/lorqb-c14-green-to-yellow` | `/lorqb-c15-yellow-to-blue`  |
-| Artifact    | `C12_blue_to_red.py`       | `C13_red_to_green.py`      | `C14_green_to_yellow.py`     | `C15_yellow_to_blue.py`      |
-| Agent       | `animation-keyframe`       | `animation-keyframe`       | `animation-keyframe`         | `animation-keyframe`         |
-| Subagent 1  | `rotation-phase`           | `rotation-phase`           | `rotation-phase`             | `rotation-phase`             |
-| Subagent 2  | `ball-transfer`            | `ball-transfer`            | `ball-transfer`              | `ball-transfer`              |
-| Subagent 3  | `hinge-verify`             | `hinge-verify`             | `hinge-verify`               | `hinge-verify`               |
+| Component   | C12                            | C13                            | C14                              | C15                              |
+|-------------|--------------------------------|--------------------------------|----------------------------------|----------------------------------|
+| Transition  | Blue → Red                     | Red → Green                    | Green → Yellow                   | Yellow → Blue                    |
+| Skill       | `/lorqb-c12-blue-to-red`       | `/lorqb-c13-red-to-green`      | `/lorqb-c14-green-to-yellow`     | `/lorqb-c15-yellow-to-blue`      |
+| Artifact    | `C12_blue_to_red.py`           | `C13_red_to_green.py`          | `C14_green_to_yellow.py`         | `C15_yellow_to_blue.py`          |
+| Artifact REV| `C12_blue_to_red_REV.py`       | `C13_red_to_green_REV.py`      | `C14_green_to_yellow_REV.py`     | `C15_yellow_to_blue_REV.py`      |
+| Agent 1     | `animation-keyframe`           | `animation-keyframe`           | `animation-keyframe`             | `animation-keyframe`             |
+| Agent 3     | `return-to-base`               | `return-to-base`               | `return-to-base`                 | `return-to-base`                 |
+| Subagent 1  | `rotation-phase`               | `rotation-phase`               | `rotation-phase`                 | `rotation-phase`                 |
+| Subagent 2  | `ball-transfer`                | `ball-transfer`                | `ball-transfer`                  | `ball-transfer`                  |
+| Subagent 3  | `hinge-verify`                 | `hinge-verify`                 | `hinge-verify`                   | `hinge-verify`                   |
 
 ---
 
 ### T Series — Movement only (T01 → T02 → T03 → T04)
 
-Same structure as C series — different cube pairs, same subagent anatomy:
+Same anatomy as C series — forward script + _REV companion per transition:
 
-| Component   | T01                        | T02                        | T03                        | T04                        |
-|-------------|----------------------------|----------------------------|----------------------------|----------------------------|
-| Transition  | Blue → Green               | Yellow → Red               | Red → Yellow               | Green → Blue               |
-| Skill       | `/lorqb-t01-blue-to-green` | `/lorqb-t02-yellow-to-red` | `/lorqb-t03-red-to-yellow` | `/lorqb-t04-green-to-blue` |
-| Artifact    | `T01_blue_to_green.py`     | `T02_yellow_to_red.py`     | `T03_red_to_yellow.py`     | `T04_green_to_blue.py`     |
-| Agent       | `animation-keyframe`       | `animation-keyframe`       | `animation-keyframe`       | `animation-keyframe`       |
-| Subagent 1  | `rotation-phase`           | `rotation-phase`           | `rotation-phase`           | `rotation-phase`           |
-| Subagent 2  | `ball-transfer`            | `ball-transfer`            | `ball-transfer`            | `ball-transfer`            |
-| Subagent 3  | `hinge-verify`             | `hinge-verify`             | `hinge-verify`             | `hinge-verify`             |
+| Component   | T01                            | T02                            | T03                            | T04                            |
+|-------------|--------------------------------|--------------------------------|--------------------------------|--------------------------------|
+| Transition  | Blue → Green                   | Yellow → Red                   | Red → Yellow                   | Green → Blue                   |
+| Skill       | `/lorqb-t01-blue-to-green`     | `/lorqb-t02-yellow-to-red`     | `/lorqb-t03-red-to-yellow`     | `/lorqb-t04-green-to-blue`     |
+| Artifact    | `T01_blue_to_green.py`         | `T02_yellow_to_red.py`         | `T03_red_to_yellow.py`         | `T04_green_to_blue.py`         |
+| Artifact REV| `T01_blue_to_green_REV.py`     | `T02_yellow_to_red_REV.py`     | `T03_red_to_yellow_REV.py`     | `T04_green_to_blue_REV.py`     |
+| Agent 1     | `animation-keyframe`           | `animation-keyframe`           | `animation-keyframe`           | `animation-keyframe`           |
+| Agent 3     | `return-to-base`               | `return-to-base`               | `return-to-base`               | `return-to-base`               |
+| Subagent 1  | `rotation-phase`               | `rotation-phase`               | `rotation-phase`               | `rotation-phase`               |
+| Subagent 2  | `ball-transfer`                | `ball-transfer`                | `ball-transfer`                | `ball-transfer`                |
+| Subagent 3  | `hinge-verify`                 | `hinge-verify`                 | `hinge-verify`                 | `hinge-verify`                 |
 
 ---
 
@@ -74,10 +79,16 @@ Handles: Blender operator/panel registration, N-panel buttons
 Primary files: `C01_lorQB_Master_Runner.py`, `C10` panel section
 Spawn when: adding buttons, class conflicts, registration errors
 
-### `animation-keyframe` (agent — orchestrates movement)
-Handles: full movement sequence, rotation angles, frame timing
+### `animation-keyframe` (Agent 1 — orchestrates forward movement)
+Handles: full forward movement sequence, rotation angles, frame timing
 Primary files: `C12–C15`, `T01–T04`
 Coordinates: `rotation-phase` + `ball-transfer` + `hinge-verify`
+
+### `return-to-base` (Agent 3 — orchestrates reverse movement)
+Handles: _REV scripts — reverses the cube rotation back to start position
+Primary files: `C12_REV–C15_REV`, `T01_REV–T04_REV` (paired with each forward script)
+Rule: every forward movement script must have a _REV companion
+Coordinates: `rotation-phase` + `ball-transfer` + `hinge-verify` (same subagents, opposite direction)
 
 ### `rotation-phase` (subagent of animation-keyframe)
 Handles: cube rotation keyframes, axis constraints, angle values
