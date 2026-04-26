@@ -44,6 +44,38 @@ SEQUENCE = [
     ("C15_yellow_to_blue.py",  "setup_yellow_to_blue"),
 ]
 
+# REV variants — same order, matching forward SEQUENCE indices.
+SEQUENCE_REV = [
+    ("C12_blue_to_red_REV.py",     "setup_red_to_blue"),
+    ("C13_red_to_green_REV.py",    "setup_green_to_red"),
+    ("C14_green_to_yellow_REV.py", "setup_yellow_to_green"),
+    ("C15_yellow_to_blue_REV.py",  "setup_blue_to_yellow"),
+]
+
+# Per-row REV labels for the panel button (toggle ON state).
+C_ROW_LABELS_REV = [
+    "C12_REV: Red -> Blue",
+    "C13_REV: Green -> Red",
+    "C14_REV: Yellow -> Green",
+    "C15_REV: Blue -> Yellow",
+]
+C_ROW_LABELS_FWD = [
+    "C12: Blue -> Red",
+    "C13: Red -> Green",
+    "C14: Green -> Yellow",
+    "C15: Yellow -> Blue",
+]
+C_TOGGLE_PROPS = ["lorqb_c12_rev", "lorqb_c13_rev", "lorqb_c14_rev", "lorqb_c15_rev"]
+
+
+def _c_row_choice(scene, idx):
+    """Return (filename, funcname, label) for C-row idx based on its toggle."""
+    is_rev = bool(getattr(scene, C_TOGGLE_PROPS[idx], False))
+    seq = SEQUENCE_REV if is_rev else SEQUENCE
+    label = C_ROW_LABELS_REV[idx] if is_rev else C_ROW_LABELS_FWD[idx]
+    fn, func = seq[idx]
+    return fn, func, label
+
 T_SEQUENCE = [
     ("T01_blue_to_green.py",  "setup_blue_to_green"),
     ("T02_yellow_to_red.py",  "setup_yellow_to_red"),
@@ -57,9 +89,11 @@ def _exec_and_call(filename, funcname):
         print(f"ERROR: File not found: {path}")
         return False, f"File not found: {filename}"
     with open(path, "r") as f:
-        lines = f.readlines()
-    code = "".join(lines[:-1])
-    ns = {"__file__": path, "bpy": bpy}
+        code = f.read()
+    # Suppress the script's auto-register call by faking __name__.
+    # Each script's `if __name__ == "__main__":` block won't fire here,
+    # so we get its function definitions without re-registering its panel.
+    ns = {"__file__": path, "__name__": "_lorqb_master_exec", "bpy": bpy}
     try:
         exec(compile(code, path, "exec"), ns)
     except Exception as e:
@@ -96,7 +130,8 @@ class LORQB_OT_run_all(bpy.types.Operator):
 
     def execute(self, context):
         bpy.app.driver_namespace["lorqb_run_all"] = True
-        for filename, funcname in SEQUENCE:
+        for idx in range(len(SEQUENCE)):
+            filename, funcname, _ = _c_row_choice(context.scene, idx)
             ok, err = _exec_and_call(filename, funcname)
             if not ok:
                 self.report({'ERROR'}, f"{filename}: {err}")
@@ -160,6 +195,15 @@ LORQB_OT_master_c14 = _make_master_op("master_c14", "lorqb.master_c14",
     "C14: Green -> Yellow", "C14_green_to_yellow.py", "setup_green_to_yellow", "C14 Start")
 LORQB_OT_master_c15 = _make_master_op("master_c15", "lorqb.master_c15",
     "C15: Yellow -> Blue",  "C15_yellow_to_blue.py",  "setup_yellow_to_blue",  "C15 Start")
+
+LORQB_OT_master_c12_rev = _make_master_op("master_c12_rev", "lorqb.master_c12_rev",
+    "C12_REV: Red -> Blue",     "C12_blue_to_red_REV.py",     "setup_red_to_blue",     "C12_REV Start")
+LORQB_OT_master_c13_rev = _make_master_op("master_c13_rev", "lorqb.master_c13_rev",
+    "C13_REV: Green -> Red",    "C13_red_to_green_REV.py",    "setup_green_to_red",    "C13_REV Start")
+LORQB_OT_master_c14_rev = _make_master_op("master_c14_rev", "lorqb.master_c14_rev",
+    "C14_REV: Yellow -> Green", "C14_green_to_yellow_REV.py", "setup_yellow_to_green", "C14_REV Start")
+LORQB_OT_master_c15_rev = _make_master_op("master_c15_rev", "lorqb.master_c15_rev",
+    "C15_REV: Blue -> Yellow",  "C15_yellow_to_blue_REV.py",  "setup_blue_to_yellow",  "C15_REV Start")
 LORQB_OT_master_t1  = _make_master_op("master_t1",  "lorqb.master_t1",
     "T01: Blue -> Green",   "T01_blue_to_green.py",   "setup_blue_to_green",   "T01 Start")
 LORQB_OT_master_t2  = _make_master_op("master_t2",  "lorqb.master_t2",
@@ -197,10 +241,25 @@ class LORQB_PT_c01_panel(bpy.types.Panel):
         # -- C-Series --
         layout.separator()
         layout.label(text="C-Series (Single Moves)")
-        btn(layout, "lorqb.master_c12", "C12: Blue -> Red")
-        btn(layout, "lorqb.master_c13", "C13: Red -> Green")
-        btn(layout, "lorqb.master_c14", "C14: Green -> Yellow")
-        btn(layout, "lorqb.master_c15", "C15: Yellow -> Blue")
+
+        c_rows = [
+            ("lorqb.master_c12", "lorqb.master_c12_rev", C_TOGGLE_PROPS[0]),
+            ("lorqb.master_c13", "lorqb.master_c13_rev", C_TOGGLE_PROPS[1]),
+            ("lorqb.master_c14", "lorqb.master_c14_rev", C_TOGGLE_PROPS[2]),
+            ("lorqb.master_c15", "lorqb.master_c15_rev", C_TOGGLE_PROPS[3]),
+        ]
+        for idx, (op_fwd, op_rev, prop_name) in enumerate(c_rows):
+            is_rev = bool(getattr(context.scene, prop_name, False))
+            op_id  = op_rev if is_rev else op_fwd
+            label  = C_ROW_LABELS_REV[idx] if is_rev else C_ROW_LABELS_FWD[idx]
+            row = layout.row(align=True)
+            # Compact toggle: icon-only checkbox using stock RADIOBUT icons.
+            row.prop(context.scene, prop_name, text="",
+                     icon='RADIOBUT_ON' if is_rev else 'RADIOBUT_OFF',
+                     toggle=True)
+            sub = row.row()
+            sub.emboss = 'NORMAL' if op_id == active else 'NONE'
+            sub.operator(op_id, text=label, icon='FORWARD')
 
         # -- T-Series --
         layout.separator()
@@ -213,9 +272,30 @@ class LORQB_PT_c01_panel(bpy.types.Panel):
 _classes = [
     LORQB_OT_run_all, LORQB_OT_run_all_t,
     LORQB_OT_master_c12, LORQB_OT_master_c13, LORQB_OT_master_c14, LORQB_OT_master_c15,
+    LORQB_OT_master_c12_rev, LORQB_OT_master_c13_rev,
+    LORQB_OT_master_c14_rev, LORQB_OT_master_c15_rev,
     LORQB_OT_master_t1,  LORQB_OT_master_t2,  LORQB_OT_master_t3,  LORQB_OT_master_t4,
     LORQB_PT_c01_panel,
 ]
+
+
+def _register_scene_props():
+    for name in C_TOGGLE_PROPS:
+        if not hasattr(bpy.types.Scene, name):
+            setattr(bpy.types.Scene, name,
+                    bpy.props.BoolProperty(
+                        name=name,
+                        description="Toggle this row to use the REV variant",
+                        default=False))
+
+
+def _unregister_scene_props():
+    for name in C_TOGGLE_PROPS:
+        if hasattr(bpy.types.Scene, name):
+            try:
+                delattr(bpy.types.Scene, name)
+            except Exception:
+                pass
 
 ###############################################################################
 # SECTION 4: Register / Entry Point
@@ -236,9 +316,12 @@ def register():
         "LORQB_OT_run_all", "LORQB_OT_run_all_t", "LORQB_PT_c01_panel",
         "LORQB_OT_master_c12", "LORQB_OT_master_c13",
         "LORQB_OT_master_c14", "LORQB_OT_master_c15",
+        "LORQB_OT_master_c12_rev", "LORQB_OT_master_c13_rev",
+        "LORQB_OT_master_c14_rev", "LORQB_OT_master_c15_rev",
         "LORQB_OT_master_t1",  "LORQB_OT_master_t2",
         "LORQB_OT_master_t3",  "LORQB_OT_master_t4",
     ])
+    _register_scene_props()
     for cls in _classes:
         try:
             bpy.utils.register_class(cls)
@@ -264,6 +347,7 @@ def register():
         pass
 
 def unregister():
+    _unregister_scene_props()
     for cls in reversed(_classes):
         try:
             bpy.utils.unregister_class(cls)
