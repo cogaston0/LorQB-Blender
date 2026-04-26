@@ -19,7 +19,7 @@ F_END      = 240
 ROT_AXIS   = 0          # X
 ROT_SIGN   = -1.0       # inverse of forward C12 (+1.0)
 
-SEAT_RED_LOCAL  = mathutils.Vector((0.0, 0.0, 0.25))
+SEAT_RED_LOCAL  = mathutils.Vector((0.51, 0.0, -0.5))
 SEAT_BLUE_WORLD = mathutils.Vector((0.51, 0.51, 0.25))
 
 
@@ -39,6 +39,14 @@ def reset_scene_to_canonical():
         if hinge:
             hinge.rotation_mode = 'XYZ'
             hinge.rotation_euler = (0.0, 0.0, 0.0)
+    # Tear down any stale parenting from prior runs so each Run starts clean.
+    for name in ["Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+                 "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.parent is not None:
+            mw = obj.matrix_world.copy()
+            obj.parent = None
+            obj.matrix_world = mw
     for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
@@ -102,12 +110,19 @@ def setup_red_to_blue():
     print("=== C12_REV Start: Red → Blue ===")
     reset_scene_to_canonical()
 
-    blue  = bpy.data.objects.get("Cube_Blue")
-    red   = bpy.data.objects.get("Cube_Red")
-    ball  = bpy.data.objects.get("Ball")
-    hinge = bpy.data.objects.get("Hinge_Blue_Red")
+    blue   = bpy.data.objects.get("Cube_Blue")
+    red    = bpy.data.objects.get("Cube_Red")
+    green  = bpy.data.objects.get("Cube_Green")
+    yellow = bpy.data.objects.get("Cube_Yellow")
+    ball   = bpy.data.objects.get("Ball")
+    hinge  = bpy.data.objects.get("Hinge_Blue_Red")
+    hrg    = bpy.data.objects.get("Hinge_Red_Green")
+    hgy    = bpy.data.objects.get("Hinge_Green_Yellow")
     missing = [n for n, o in [("Cube_Blue", blue), ("Cube_Red", red),
-                              ("Ball", ball), ("Hinge_Blue_Red", hinge)] if o is None]
+                              ("Cube_Green", green), ("Cube_Yellow", yellow),
+                              ("Ball", ball), ("Hinge_Blue_Red", hinge),
+                              ("Hinge_Red_Green", hrg),
+                              ("Hinge_Green_Yellow", hgy)] if o is None]
     if missing:
         print("ERROR: Missing objects:", missing)
         return False
@@ -116,8 +131,15 @@ def setup_red_to_blue():
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
+    # Sub-tree: Red rides HBR, Green rides Red via HRG (rigid weld).
+    # Yellow stays on base; HGY articulates open as Green leaves.
     if red.parent != hinge:
         parent_preserve_world(red, hinge)
+    if hrg.parent != red:
+        parent_preserve_world(hrg, red)
+    if green.parent != hrg:
+        parent_preserve_world(green, hrg)
+    print("Chain: HBR ← Red ← HRG ← Green   (HGY+Yellow on base)")
 
     if ball.rigid_body:
         bpy.context.view_layer.objects.active = ball

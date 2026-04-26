@@ -12,10 +12,15 @@ import mathutils
 F_START, F_MID, F_HOLD, F_SWAP, F_RET, F_END = 1, 60, 120, 121, 180, 240
 
 ROT_AXIS = 1          # Y
-ROT_SIGN = -1.0       # inverse of forward C15 (+1.0)
+ROT_SIGN = -1.0       # inverse of forward C15 — the other side of HRG folds
 
-SEAT_BLUE_LOCAL   = mathutils.Vector((0.0, 0.0, 0.25))
-SEAT_YELLOW_WORLD = mathutils.Vector((-0.51, 0.51, 0.25))
+# Blue rides Red as passive carrier. Blue's origin is at HBR (+0.51, 0, +1).
+# Blue's mesh center is world (+0.51, +0.51, +0.5).
+# Local offset from Blue's origin to its mesh center:
+#   (0.51-0.51, 0.51-0, 0.5-1) = (0, +0.51, -0.5)
+SEAT_BLUE_LOCAL   = mathutils.Vector((0.0, 0.51, -0.5))
+# Yellow stays fixed. Geometric center in world: (-0.51, +0.51, +0.5).
+SEAT_YELLOW_WORLD = mathutils.Vector((-0.51, 0.51, 0.5))
 
 
 def reset_scene_to_canonical():
@@ -34,6 +39,14 @@ def reset_scene_to_canonical():
         if h:
             h.rotation_mode = 'XYZ'
             h.rotation_euler = (0.0, 0.0, 0.0)
+    # Tear down stale parenting from prior runs so each Run starts clean.
+    for name in ["Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+                 "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.parent is not None:
+            mw = obj.matrix_world.copy()
+            obj.parent = None
+            obj.matrix_world = mw
     for sn in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         s = bpy.data.objects.get(sn)
         if s: bpy.data.objects.remove(s, do_unlink=True)
@@ -90,10 +103,12 @@ def setup_blue_to_yellow():
     reset_scene_to_canonical()
     blue   = bpy.data.objects.get("Cube_Blue")
     yellow = bpy.data.objects.get("Cube_Yellow")
+    red    = bpy.data.objects.get("Cube_Red")
     ball   = bpy.data.objects.get("Ball")
     hinge  = bpy.data.objects.get("Hinge_Red_Green")
     missing = [n for n, o in [("Cube_Blue", blue), ("Cube_Yellow", yellow),
-                              ("Ball", ball), ("Hinge_Red_Green", hinge)] if o is None]
+                              ("Cube_Red", red), ("Ball", ball),
+                              ("Hinge_Red_Green", hinge)] if o is None]
     if missing:
         print("ERROR: Missing objects:", missing)
         return False
@@ -102,8 +117,13 @@ def setup_blue_to_yellow():
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    if blue.parent != hinge:
-        parent_preserve_world(blue, hinge)
+    # Chain: Red driven by HRG, Blue rides Red. Green and Yellow fixed.
+    # Reverse of forward C15 — Blue+Red side of HRG folds instead.
+    if red.parent != hinge:
+        parent_preserve_world(red, hinge)
+    if blue.parent != red:
+        parent_preserve_world(blue, red)
+    print("Chain: HRG ← Red ← Blue   (Green+Yellow fixed)")
 
     if ball.rigid_body:
         bpy.context.view_layer.objects.active = ball

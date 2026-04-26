@@ -12,10 +12,10 @@ import mathutils
 F_START, F_MID, F_HOLD, F_SWAP, F_RET, F_END = 1, 60, 120, 121, 180, 240
 
 ROT_AXIS = 0          # X
-ROT_SIGN = -1.0       # inverse of forward C14 (+1.0)
+ROT_SIGN = +1.0       # flipped from -1.0 to avoid Yellow→Green collision
 
-SEAT_YELLOW_LOCAL = mathutils.Vector((0.0, 0.0, 0.25))
-SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.25))
+SEAT_YELLOW_LOCAL = mathutils.Vector((0.0, 0.51, -0.5))
+SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.5))
 
 
 def reset_scene_to_canonical():
@@ -34,6 +34,14 @@ def reset_scene_to_canonical():
         if h:
             h.rotation_mode = 'XYZ'
             h.rotation_euler = (0.0, 0.0, 0.0)
+    # Tear down stale parenting from prior runs so each Run starts clean.
+    for name in ["Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+                 "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.parent is not None:
+            mw = obj.matrix_world.copy()
+            obj.parent = None
+            obj.matrix_world = mw
     for sn in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         s = bpy.data.objects.get(sn)
         if s: bpy.data.objects.remove(s, do_unlink=True)
