@@ -1,9 +1,8 @@
 # ============================================================================
-# C12_red_to_blue.py  (Blender 5.0.1)
+# C12_blue_to_red_REV.py  (Blender 5.0.1)
 # C12_REV — Red → Blue
-# Frames 1 – 240 | Transfer at frame 120 → 121
-# Hinge: Hinge_Blue_Red (shared with C12 forward)
-# Mirror of C12_blue_to_red.py — source/destination swapped
+# Hinge: Hinge_Blue_Red (X-axis)
+# Mirror of C13_red_to_green_REV.py — source/destination swapped
 # ============================================================================
 
 import bpy
@@ -17,20 +16,17 @@ F_SWAP     = 121
 F_RET      = 180
 F_END      = 240
 
-ROT_AXIS   = 0
-ROT_SIGN   = -1.0  # inverse of forward C12
-BALL_RADIUS = 0.25
+ROT_AXIS   = 0          # X
+ROT_SIGN   = -1.0       # inverse of forward C12 (+1.0)
 
 SEAT_RED_LOCAL  = mathutils.Vector((0.0, 0.0, 0.25))
 SEAT_BLUE_WORLD = mathutils.Vector((0.51, 0.51, 0.25))
 
 
 def reset_scene_to_canonical():
-    all_names = [
-        "Ball",
+    all_names = ["Ball",
         "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
-        "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
-    ]
+        "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]
     for name in all_names:
         obj = bpy.data.objects.get(name)
         if obj and obj.animation_data:
@@ -48,7 +44,6 @@ def reset_scene_to_canonical():
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
     bpy.context.view_layer.update()
-    print("=== Scene reset to canonical state ===")
 
 
 def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
@@ -77,7 +72,7 @@ def set_last_keyframe_interpolation(obj, data_path, frame, interp='LINEAR'):
                     kp.interpolation = interp
 
 
-def key_rot_x(obj, frame, degrees):
+def key_rot(obj, frame, degrees):
     bpy.context.scene.frame_set(frame)
     obj.rotation_mode = 'XYZ'
     obj.rotation_euler[ROT_AXIS] = ROT_SIGN * math.radians(degrees)
@@ -89,7 +84,6 @@ def key_influence(obj, constraint_name, frame, value):
     bpy.context.scene.frame_set(frame)
     con = obj.constraints.get(constraint_name)
     if not con:
-        print(f"WARNING: Constraint '{constraint_name}' not found on {obj.name}")
         return
     con.influence = value
     data_path = f'constraints["{constraint_name}"].influence'
@@ -112,11 +106,8 @@ def setup_red_to_blue():
     red   = bpy.data.objects.get("Cube_Red")
     ball  = bpy.data.objects.get("Ball")
     hinge = bpy.data.objects.get("Hinge_Blue_Red")
-
-    missing = [n for n, o in [
-        ("Cube_Blue", blue), ("Cube_Red", red),
-        ("Ball", ball), ("Hinge_Blue_Red", hinge),
-    ] if o is None]
+    missing = [n for n, o in [("Cube_Blue", blue), ("Cube_Red", red),
+                              ("Ball", ball), ("Hinge_Blue_Red", hinge)] if o is None]
     if missing:
         print("ERROR: Missing objects:", missing)
         return False
@@ -125,10 +116,8 @@ def setup_red_to_blue():
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    # Reverse: parent Red (source) to hinge instead of Blue
     if red.parent != hinge:
         parent_preserve_world(red, hinge)
-        print("Cube_Red parented to Hinge_Blue_Red.")
 
     if ball.rigid_body:
         bpy.context.view_layer.objects.active = ball
@@ -144,7 +133,6 @@ def setup_red_to_blue():
     bpy.context.scene.frame_set(F_START)
     bpy.context.view_layer.update()
 
-    # Source seat: Red LOCAL
     seat_red_world = red.matrix_world @ SEAT_RED_LOCAL
     seat_red = bpy.data.objects.new("Seat_Red", None)
     seat_red.empty_display_type = 'SPHERE'
@@ -152,12 +140,10 @@ def setup_red_to_blue():
     bpy.context.scene.collection.objects.link(seat_red)
     seat_red.parent = red
     seat_red.location = SEAT_RED_LOCAL.copy()
-    print(f"Seat_Red world (derived): {seat_red_world[:]}")
 
     ball.matrix_world.translation = seat_red_world.copy()
     bpy.context.view_layer.update()
 
-    # Destination seat: Blue WORLD → LOCAL
     seat_blue_local = blue.matrix_world.inverted() @ SEAT_BLUE_WORLD
     seat_blue = bpy.data.objects.new("Seat_Blue", None)
     seat_blue.empty_display_type = 'SPHERE'
@@ -165,7 +151,6 @@ def setup_red_to_blue():
     bpy.context.scene.collection.objects.link(seat_blue)
     seat_blue.parent = blue
     seat_blue.location = seat_blue_local
-    print(f"Seat_Blue world (target): {SEAT_BLUE_WORLD[:]}")
 
     bpy.context.view_layer.update()
 
@@ -177,12 +162,12 @@ def setup_red_to_blue():
     latch_blue.name = "Latch_Blue"
     latch_blue.target = seat_blue
 
-    key_rot_x(hinge, F_START,   0)
-    key_rot_x(hinge, F_MID,    90)
-    key_rot_x(hinge, F_HOLD,  180)
-    key_rot_x(hinge, F_SWAP,  180)
-    key_rot_x(hinge, F_RET,    90)
-    key_rot_x(hinge, F_END,     0)
+    key_rot(hinge, F_START,   0)
+    key_rot(hinge, F_MID,    90)
+    key_rot(hinge, F_HOLD,  180)
+    key_rot(hinge, F_SWAP,  180)
+    key_rot(hinge, F_RET,    90)
+    key_rot(hinge, F_END,     0)
 
     key_influence(ball, "Latch_Red",  F_START, 1.0)
     key_influence(ball, "Latch_Blue", F_START, 0.0)
@@ -204,10 +189,8 @@ class LORQB_OT_ResetC12Rev(bpy.types.Operator):
     bl_idname  = "lorqb.reset_c12_rev"
     bl_label   = "Reset to Base"
     bl_options = {'REGISTER', 'UNDO'}
-
     def execute(self, context):
         reset_scene_to_canonical()
-        self.report({'INFO'}, "Reset to base complete")
         return {'FINISHED'}
 
 
@@ -215,13 +198,10 @@ class LORQB_OT_RedToBlue(bpy.types.Operator):
     bl_idname  = "lorqb.red_to_blue"
     bl_label   = "Red to Blue C12_REV"
     bl_options = {'REGISTER', 'UNDO'}
-
     def execute(self, context):
         ok = setup_red_to_blue()
-        if ok:
-            self.report({'INFO'}, "C12_REV complete: Red → Blue")
-        else:
-            self.report({'ERROR'}, "C12_REV failed — check console")
+        self.report({'INFO' if ok else 'ERROR'},
+                    "C12_REV complete" if ok else "C12_REV failed")
         return {'FINISHED'}
 
 
@@ -231,7 +211,6 @@ class LORQB_PT_C12RevPanel(bpy.types.Panel):
     bl_space_type  = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category    = 'LorQB'
-
     def draw(self, context):
         layout = self.layout
         layout.operator("lorqb.reset_c12_rev", text="Reset to Base", icon='LOOP_BACK')
@@ -241,24 +220,16 @@ class LORQB_PT_C12RevPanel(bpy.types.Panel):
 
 _classes = (LORQB_OT_ResetC12Rev, LORQB_OT_RedToBlue, LORQB_PT_C12RevPanel)
 
-
 def register():
     for cls in _classes:
-        try:
-            bpy.utils.unregister_class(cls)
-        except Exception:
-            pass
+        try: bpy.utils.unregister_class(cls)
+        except Exception: pass
         bpy.utils.register_class(cls)
-    print("✓ LorQB C12_REV Panel Ready.")
-
 
 def unregister():
     for cls in reversed(_classes):
-        try:
-            bpy.utils.unregister_class(cls)
-        except Exception:
-            pass
-
+        try: bpy.utils.unregister_class(cls)
+        except Exception: pass
 
 if __name__ == "__main__":
     register()

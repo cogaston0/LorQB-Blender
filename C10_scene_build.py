@@ -199,10 +199,10 @@ def build_scene():
 
     # ── Seats ───────────────────────────────────────────────────────────────
     seat_config = {
-        'blue':   ( 0.51,  0.51, 0.0),
-        'red':    ( 0.51, -0.51, 0.0),
-        'green':  (-0.51, -0.51, 0.0),
-        'yellow': (-0.51,  0.51, 0.0),
+        'blue':   ( 0.51,  0.51, 0.07),
+        'red':    ( 0.51, -0.51, 0.07),
+        'green':  (-0.51, -0.51, 0.07),
+        'yellow': (-0.51,  0.51, 0.07),
     }
 
     seats = {}
@@ -256,11 +256,11 @@ def build_scene():
 class LORQB_OT_reset_c10(bpy.types.Operator):
     bl_idname      = "lorqb.reset_c10"
     bl_label       = "Reset to Base"
-    bl_description = "Remove all scene objects"
+    bl_description = "Clear and rebuild the canonical base layout"
 
     def execute(self, context):
-        clear_scene()
-        self.report({'INFO'}, "Scene cleared")
+        build_scene()
+        self.report({'INFO'}, "Reset to base complete")
         return {'FINISHED'}
 
 
