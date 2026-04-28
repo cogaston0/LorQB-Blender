@@ -262,12 +262,26 @@ class LORQB_PT_c01_panel(bpy.types.Panel):
             sub.operator(op_id, text=label, icon='FORWARD')
 
         # -- T-Series --
+        # Placeholder column on the left mirrors the C-Series radio width so
+        # both lists align visually. The placeholder is non-interactive.
         layout.separator()
         layout.label(text="T-Series (Diagonal Moves)")
-        btn(layout, "lorqb.master_t1", "T01: Blue -> Green")
-        btn(layout, "lorqb.master_t2", "T02: Yellow -> Red")
-        btn(layout, "lorqb.master_t3", "T03: Red -> Yellow")
-        btn(layout, "lorqb.master_t4", "T04: Green -> Blue")
+
+        t_rows = [
+            ("lorqb.master_t1", "T01: Blue -> Green"),
+            ("lorqb.master_t2", "T02: Yellow -> Red"),
+            ("lorqb.master_t3", "T03: Red -> Yellow"),
+            ("lorqb.master_t4", "T04: Green -> Blue"),
+        ]
+        for op_id, label in t_rows:
+            row = layout.row(align=True)
+            # Disabled placeholder matching the C-Series radio toggle column.
+            placeholder = row.row(align=True)
+            placeholder.enabled = False
+            placeholder.label(text="", icon='BLANK1')
+            sub = row.row()
+            sub.emboss = 'NORMAL' if op_id == active else 'NONE'
+            sub.operator(op_id, text=label, icon='FORWARD')
 
 _classes = [
     LORQB_OT_run_all, LORQB_OT_run_all_t,
@@ -347,7 +361,7 @@ def register():
         pass
 
 def unregister():
-    _unregister_scene_props()
+    _unregister_scene_props()You need to lock 
     for cls in reversed(_classes):
         try:
             bpy.utils.unregister_class(cls)

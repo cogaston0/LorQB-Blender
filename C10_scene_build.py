@@ -160,17 +160,118 @@ def build_scene():
         ball.name = "Ball"
 
     # ── Hinges ──────────────────────────────────────────────────────────────
+    def _create_hinge_visual(location, axis, name, hinge_empty,
+                             cube_pos, cube_neg):
+        # Real door-hinge geometry:
+        #   - horizontal pin (cylinder) parented to the hinge empty (rotates with it)
+        #   - two flat leaves, each parented to its respective cube
+        # `cube_pos` is the cube on the +offset side, `cube_neg` on the -offset side.
+        pin_radius   = 0.025
+        pin_length   = 0.5      # along the seam
+        leaf_long    = 0.5      # match pin length exactly so leaves align with pin
+        leaf_wide    = 0.12     # extends out onto a cube's top face
+        leaf_thick   = 0.015    # thin — lies flat on the cube top
+
+        # Shared white material for pin + leaves
+        mat_name = name + "_Mat"
+        mat = bpy.data.materials.get(mat_name)
+        if mat is None:
+            mat = bpy.data.materials.new(name=mat_name)
+            mat.diffuse_color = (1.0, 1.0, 1.0, 1.0)
+
+        # ── Pin: 4 short knuckle segments along the hinge axis with gaps ────
+        n_knuckles = 4
+        seg_len = (pin_length / n_knuckles) * 0.95  # 95% segment, 5% gap
+        gap     = (pin_length - n_knuckles * seg_len) / (n_knuckles - 1)
+
+        for i in range(n_knuckles):
+            # Center of segment i along the pin span (centered on `location`)
+            t = -pin_length / 2 + seg_len / 2 + i * (seg_len + gap)
+            if axis == 'X':
+                seg_loc = (location[0] + t, location[1], location[2])
+            else:                                # 'Y'
+                seg_loc = (location[0], location[1] + t, location[2])
+
+            bpy.ops.mesh.primitive_cylinder_add(radius=pin_radius, depth=seg_len,
+                                                location=seg_loc)
+            seg = bpy.context.object
+            seg.name = f"{name}_Pin_{i+1}"
+            # Default cylinder runs along Z. Rotate to match the hinge axis.
+            if axis == 'X':
+                seg.rotation_euler[1] = 1.5708
+            else:
+                seg.rotation_euler[0] = 1.5708
+            bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+            seg.data.materials.append(mat)
+
+            bpy.context.view_layer.update()
+            mw = seg.matrix_world.copy()
+            seg.parent = hinge_empty
+            seg.matrix_parent_inverse = hinge_empty.matrix_world.inverted()
+            seg.matrix_world = mw
+
+        # ── Two leaves: each parented to its own cube ───────────────────────
+        # Z-lift so leaves sit on top of cube faces (cube tops at Z=1).
+        z_lift = leaf_thick / 2  # bottom of leaf flush with cube top
+        if axis == 'Y':
+            # Pin along Y; leaves extend ±X. cube_pos at +X, cube_neg at -X.
+            leaf_size = (leaf_wide, leaf_long, leaf_thick)
+            leaf_specs = [
+                (( leaf_wide / 2, 0, z_lift), cube_pos),
+                ((-leaf_wide / 2, 0, z_lift), cube_neg),
+            ]
+        else:                              # 'X'
+            # Pin along X; leaves extend ±Y. cube_pos at +Y, cube_neg at -Y.
+            leaf_size = (leaf_long, leaf_wide, leaf_thick)
+            leaf_specs = [
+                ((0,  leaf_wide / 2, z_lift), cube_pos),
+                ((0, -leaf_wide / 2, z_lift), cube_neg),
+            ]
+
+        for i, (off, cube_owner) in enumerate(leaf_specs):
+            leaf_loc = (location[0] + off[0], location[1] + off[1], location[2] + off[2])
+            bpy.ops.mesh.primitive_cube_add(size=1.0, location=leaf_loc)
+            leaf = bpy.context.object
+            leaf.name = f"{name}_Leaf_{i+1}"
+            leaf.scale = leaf_size
+            bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+            # Leaf takes the color of the cube it's mounted on.
+            cube_mat = (cube_owner.data.materials[0]
+                        if cube_owner.data.materials else None)
+            if cube_mat is not None:
+                leaf.data.materials.append(cube_mat)
+            else:
+                leaf.data.materials.append(mat)
+            bpy.context.view_layer.update()
+            mw_leaf = leaf.matrix_world.copy()
+            leaf.parent = cube_owner
+            leaf.matrix_parent_inverse = cube_owner.matrix_world.inverted()
+            leaf.matrix_world = mw_leaf
+
+    # Hinge axis = direction the pin runs (parallel to the shared cube edge).
+    # cube_pos / cube_neg = which cube each leaf attaches to.
+    # axis='X': pin along X, leaves extend ±Y → cube_pos at +Y, cube_neg at -Y.
+    # axis='Y': pin along Y, leaves extend ±X → cube_pos at +X, cube_neg at -X.
+    #   HBR at (+0.51, 0, 1): axis X. +Y = Blue, -Y = Red.
+    #   HRG at (0, -0.51, 1): axis Y. +X = Red,  -X = Green.
+    #   HGY at (-0.51, 0, 1): axis X. +Y = Yellow, -Y = Green.
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0.51, 0, 1), scale=(0.1, 0.1, 0.1))
     hinge_1 = bpy.context.object
     hinge_1.name = "Hinge_Blue_Red"
+    _create_hinge_visual((0.51, 0, 1), 'X', "Hinge_Blue_Red", hinge_1,
+                         cubes['blue'], cubes['red'])
 
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, -0.51, 1), scale=(0.1, 0.1, 0.1))
     hinge_2 = bpy.context.object
     hinge_2.name = "Hinge_Red_Green"
+    _create_hinge_visual((0, -0.51, 1), 'Y', "Hinge_Red_Green", hinge_2,
+                         cubes['red'], cubes['green'])
 
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(-0.51, 0, 1), scale=(0.1, 0.1, 0.1))
     hinge_3 = bpy.context.object
     hinge_3.name = "Hinge_Green_Yellow"
+    _create_hinge_visual((-0.51, 0, 1), 'X', "Hinge_Green_Yellow", hinge_3,
+                         cubes['yellow'], cubes['green'])
 
     # ── Cube pivots → hinge locations ───────────────────────────────────────
     bpy.context.view_layer.objects.active = cubes['blue']
