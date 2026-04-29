@@ -10,6 +10,7 @@
 
 import bpy
 import json
+from bpy.app.handlers import persistent
 from bpy.types import Operator, Panel
 
 # ============================================================================
@@ -120,6 +121,90 @@ MOVE_CODES = [
     "T01", "T01_REV",
     "T02", "T02_REV",
 ]
+
+MOVE_START_COLOR = {
+    "C12": "Blue",
+    "C13": "Red",
+    "C14": "Green",
+    "C15": "Yellow",
+    "C12_REV": "Red",
+    "C13_REV": "Green",
+    "C14_REV": "Yellow",
+    "C15_REV": "Blue",
+    "T01": "Blue",
+    "T01_REV": "Green",
+    "T02": "Yellow",
+    "T02_REV": "Red",
+}
+
+BALL_COLOR_RGBA = {
+    "Blue": (0.0, 0.15, 1.0, 1.0),
+    "Red": (1.0, 0.0, 0.0, 1.0),
+    "Green": (0.0, 0.85, 0.0, 1.0),
+    "Yellow": (1.0, 0.9, 0.0, 1.0),
+}
+
+
+def _set_ball_color_for_move(code):
+    color_name = MOVE_START_COLOR.get(code)
+    rgba = BALL_COLOR_RGBA.get(color_name)
+    ball = bpy.data.objects.get("Ball")
+    if ball is None or rgba is None:
+        return
+
+    mat = bpy.data.materials.get("Mat_Ball_Active")
+    if mat is None:
+        mat = bpy.data.materials.new("Mat_Ball_Active")
+        mat.use_nodes = True
+
+    mat.diffuse_color = rgba
+    bsdf = mat.node_tree.nodes.get("Principled BSDF") if mat.use_nodes else None
+    if bsdf:
+        bsdf.inputs["Base Color"].default_value = rgba
+
+    ball.data.materials.clear()
+    ball.data.materials.append(mat)
+    print(f"[B02] Ball color set to {color_name} for {code}")
+
+
+def _cancel_playback_if_running():
+    screen = getattr(bpy.context, "screen", None)
+    if not screen or not getattr(screen, "is_animation_playing", False):
+        return
+    try:
+        bpy.ops.screen.animation_cancel(restore_frame=False)
+    except Exception as e:
+        print(f"[B02] Playback cancel skipped: {e}")
+
+
+@persistent
+def _b02_stop_playback_at_end(scene):
+    if not scene.get("b02_stop_playback_at_end", False):
+        return
+    if scene.frame_current < scene.frame_end:
+        return
+    scene["b02_stop_playback_at_end"] = False
+    try:
+        bpy.ops.screen.animation_cancel(restore_frame=False)
+    except Exception as e:
+        print(f"[B02] Playback stop at end skipped: {e}")
+    try:
+        scene.frame_set(scene.frame_end)
+    except Exception:
+        pass
+
+
+def _arm_playback_stop():
+    s = _scene()
+    s["b02_stop_playback_at_end"] = True
+    s.frame_set(s.frame_start)
+
+
+def _remove_b02_frame_handlers():
+    handlers = bpy.app.handlers.frame_change_post
+    for handler in list(handlers):
+        if getattr(handler, "__name__", "") == "_b02_stop_playback_at_end":
+            handlers.remove(handler)
 
 
 def _resolve_function(code):
@@ -331,6 +416,7 @@ def reset_executor_state():
     s["b02_complete"]    = False
     s["b02_last_move"]   = ""
     s["b02_last_error"]  = ""
+    s["b02_stop_playback_at_end"] = False
 
 
 def store_plan(pairs, plan):
@@ -342,6 +428,7 @@ def store_plan(pairs, plan):
     s["b02_complete"]   = False
     s["b02_last_move"]  = ""
     s["b02_last_error"] = ""
+    s["b02_stop_playback_at_end"] = False
 
 
 def get_plan():
@@ -364,7 +451,12 @@ def run_single_move(code):
     runner = RUNNERS.get(code)
     if runner is None:
         raise KeyError(f"No runner registered for {code}")
-    return runner()
+    _cancel_playback_if_running()
+    _set_ball_color_for_move(code)
+    ok = runner()
+    if ok:
+        _arm_playback_stop()
+    return ok
 
 
 def advance_one_step():
@@ -517,7 +609,6 @@ class LORQB_PT_b02_panel(Panel):
         s = context.scene
 
         layout.operator("lorqb.b02_build_plan", icon='PRESET')
-        layout.operator("lorqb.b02_run_full", icon='PLAY')
         layout.operator("lorqb.b02_run_next", icon='FORWARD')
         layout.separator()
         layout.operator("lorqb.b02_show_plan", icon='VIEWZOOM')
@@ -533,10 +624,18 @@ class LORQB_PT_b02_panel(Panel):
         complete = s.get("b02_complete", False)
         last = s.get("b02_last_move", "")
         err = s.get("b02_last_error", "")
+        next_pair = pairs[idx] if plan and idx < len(plan) and idx < len(pairs) else None
 
         box.label(text="B01 Sequence: " + (", ".join(seq) if seq else "—"))
-        box.label(text="Pairs: " + (str(pairs) if pairs else "—"))
         box.label(text="Plan: " + (", ".join(plan) if plan else "—"))
+        if pairs:
+            box.label(text="Pairs:")
+            for pair_idx, pair in enumerate(pairs, start=1):
+                box.label(text=f"{pair_idx}. {pair[0]} -> {pair[1]}")
+        else:
+            box.label(text="Pairs: —")
+        if next_pair:
+            box.label(text=f"Next: {plan[idx]} ({next_pair[0]} -> {next_pair[1]})")
         box.label(text=f"Step: {idx} / {len(plan)}")
         box.label(text="Running: " + ("YES" if running else "No"))
         box.label(text="Complete: " + ("YES" if complete else "No"))
@@ -565,9 +664,12 @@ def register():
         except RuntimeError:
             pass
         bpy.utils.register_class(cls)
+    _remove_b02_frame_handlers()
+    bpy.app.handlers.frame_change_post.append(_b02_stop_playback_at_end)
 
 
 def unregister():
+    _remove_b02_frame_handlers()
     for cls in reversed(_classes):
         try:
             bpy.utils.unregister_class(cls)
