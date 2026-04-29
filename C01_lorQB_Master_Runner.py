@@ -258,6 +258,7 @@ class LORQB_PT_c01_panel(bpy.types.Panel):
                      icon='RADIOBUT_ON' if is_rev else 'RADIOBUT_OFF',
                      toggle=True)
             sub = row.row()
+            sub.alignment = 'LEFT'
             sub.emboss = 'NORMAL' if op_id == active else 'NONE'
             sub.operator(op_id, text=label, icon='FORWARD')
 
@@ -275,11 +276,12 @@ class LORQB_PT_c01_panel(bpy.types.Panel):
         ]
         for op_id, label in t_rows:
             row = layout.row(align=True)
-            # Disabled placeholder matching the C-Series radio toggle column.
+            # Disabled radio-button placeholder mirroring C-Series toggles.
             placeholder = row.row(align=True)
             placeholder.enabled = False
-            placeholder.label(text="", icon='BLANK1')
+            placeholder.label(text="", icon='RADIOBUT_OFF')
             sub = row.row()
+            sub.alignment = 'LEFT'
             sub.emboss = 'NORMAL' if op_id == active else 'NONE'
             sub.operator(op_id, text=label, icon='FORWARD')
 
@@ -361,7 +363,7 @@ def register():
         pass
 
 def unregister():
-    _unregister_scene_props()You need to lock 
+    _unregister_scene_props()
     for cls in reversed(_classes):
         try:
             bpy.utils.unregister_class(cls)

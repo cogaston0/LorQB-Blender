@@ -67,11 +67,11 @@ SCRIPT_FILE_MAP = {
     "C15":     "C15_yellow_to_blue.py",
     "T01":     "T01_blue_to_green.py",
     "T02":     "T02_yellow_to_red.py",
-    # Reverse C variants
-    "C12_REV": "C12_red_to_blue.py",
-    "C13_REV": "C13_green_to_red.py",
-    "C14_REV": "C14_yellow_to_green.py",
-    "C15_REV": "C15_blue_to_yellow.py",
+    # Reverse C variants — actual disk filenames
+    "C12_REV": "C12_blue_to_red_REV.py",
+    "C13_REV": "C13_red_to_green_REV.py",
+    "C14_REV": "C14_green_to_yellow_REV.py",
+    "C15_REV": "C15_yellow_to_blue_REV.py",
     # Reverse T variants — reuse locked T03/T04 scripts
     "T01_REV": "T04_green_to_blue.py",
     "T02_REV": "T03_red_to_yellow.py",
@@ -95,10 +95,23 @@ OPERATOR_MAP = {
     "T02_REV": "lorqb.run_t3",
 }
 
-# --- 2c: direct function-name mapping (optional) --------------------------
-# No known module-level callables in the movement scripts; left empty.
+# --- 2c: direct function-name mapping --------------------------------------
+# Each entry: code → (module_basename_without_py, function_name).
+# This is the primary execution path: B02 imports the move script as a module
+# and calls its setup function directly. No operator context required.
 FUNCTION_NAME_MAP = {
-    # "C12": ("C12_blue_to_red", "run"),
+    "C12":     ("C12_blue_to_red",         "setup_blue_to_red"),
+    "C13":     ("C13_red_to_green",        "setup_red_to_green"),
+    "C14":     ("C14_green_to_yellow",     "setup_green_to_yellow"),
+    "C15":     ("C15_yellow_to_blue",      "setup_yellow_to_blue"),
+    "T01":     ("T01_blue_to_green",       "setup_blue_to_green"),
+    "T02":     ("T02_yellow_to_red",       "setup_yellow_to_red"),
+    "C12_REV": ("C12_blue_to_red_REV",     "setup_red_to_blue"),
+    "C13_REV": ("C13_red_to_green_REV",    "setup_green_to_red"),
+    "C14_REV": ("C14_green_to_yellow_REV", "setup_yellow_to_green"),
+    "C15_REV": ("C15_yellow_to_blue_REV",  "setup_blue_to_yellow"),
+    "T01_REV": ("T04_green_to_blue",       "setup_green_to_blue"),
+    "T02_REV": ("T03_red_to_yellow",       "setup_red_to_yellow"),
 }
 
 MOVE_CODES = [
@@ -178,13 +191,18 @@ def _make_runner(code):
         op = _resolve_operator(code)
         if op is not None:
             try:
-                op()
-                print(f"[B02] {code}: executed via operator {OPERATOR_MAP[code]}")
-                return True
+                if op.poll():
+                    op('EXEC_DEFAULT')
+                    print(f"[B02] {code}: executed via operator {OPERATOR_MAP[code]}")
+                    return True
             except Exception as e:
-                raise RuntimeError(
-                    f"Operator {OPERATOR_MAP[code]} call failed for {code}: {e}"
-                )
+                msg = str(e).lower()
+                if "not found" in msg or "search" in msg or "missing" in msg:
+                    pass  # operator not registered — fall through
+                else:
+                    raise RuntimeError(
+                        f"Operator {OPERATOR_MAP[code]} call failed for {code}: {e}"
+                    )
 
         # 3. Text datablock
         text = _resolve_text_datablock(code)
@@ -298,11 +316,10 @@ def _scene():
 
 def _get_b01_sequence():
     s = _scene()
-    raw = s.get("b01_sequence", "[]")
-    try:
-        return json.loads(raw)
-    except Exception:
+    raw = getattr(s, "lorqb_sequence", "")
+    if not raw:
         return []
+    return [c.strip().capitalize() for c in raw.split(",")]
 
 
 def reset_executor_state():

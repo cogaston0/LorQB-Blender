@@ -161,11 +161,13 @@ def build_scene():
 
     # ── Hinges ──────────────────────────────────────────────────────────────
     def _create_hinge_visual(location, axis, name, hinge_empty,
-                             cube_pos, cube_neg):
+                             cube_pos, cube_neg, pin_host):
         # Real door-hinge geometry:
-        #   - horizontal pin (cylinder) parented to the hinge empty (rotates with it)
+        #   - horizontal pin (cylinder) parented to a designated cube (pin_host)
+        #     so it rides with that cube during animations
         #   - two flat leaves, each parented to its respective cube
         # `cube_pos` is the cube on the +offset side, `cube_neg` on the -offset side.
+        # `hinge_empty` retained in signature for future use (currently unused).
         pin_radius   = 0.025
         pin_length   = 0.5      # along the seam
         leaf_long    = 0.5      # match pin length exactly so leaves align with pin
@@ -206,8 +208,8 @@ def build_scene():
 
             bpy.context.view_layer.update()
             mw = seg.matrix_world.copy()
-            seg.parent = hinge_empty
-            seg.matrix_parent_inverse = hinge_empty.matrix_world.inverted()
+            seg.parent = pin_host
+            seg.matrix_parent_inverse = pin_host.matrix_world.inverted()
             seg.matrix_world = mw
 
         # ── Two leaves: each parented to its own cube ───────────────────────
@@ -259,19 +261,19 @@ def build_scene():
     hinge_1 = bpy.context.object
     hinge_1.name = "Hinge_Blue_Red"
     _create_hinge_visual((0.51, 0, 1), 'X', "Hinge_Blue_Red", hinge_1,
-                         cubes['blue'], cubes['red'])
+                         cubes['blue'], cubes['red'], cubes['red'])
 
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, -0.51, 1), scale=(0.1, 0.1, 0.1))
     hinge_2 = bpy.context.object
     hinge_2.name = "Hinge_Red_Green"
     _create_hinge_visual((0, -0.51, 1), 'Y', "Hinge_Red_Green", hinge_2,
-                         cubes['red'], cubes['green'])
+                         cubes['red'], cubes['green'], cubes['red'])
 
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(-0.51, 0, 1), scale=(0.1, 0.1, 0.1))
     hinge_3 = bpy.context.object
     hinge_3.name = "Hinge_Green_Yellow"
     _create_hinge_visual((-0.51, 0, 1), 'X', "Hinge_Green_Yellow", hinge_3,
-                         cubes['yellow'], cubes['green'])
+                         cubes['yellow'], cubes['green'], cubes['yellow'])
 
     # ── Cube pivots → hinge locations ───────────────────────────────────────
     bpy.context.view_layer.objects.active = cubes['blue']
