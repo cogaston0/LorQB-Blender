@@ -25,7 +25,7 @@ F_RET   = 660   # Return: Green at 90° on way back
 F_END   = 720   # End:   Green at 0°, ball in Yellow
 
 ROT_AXIS = 0        # X-axis index in rotation_euler
-ROT_SIGN = +1.0     # Positive X rotation — flip if backwards
+ROT_SIGN = -1.0     # TODO: verify empirically in viewport — never infer from other scripts
 
 SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.25))
 SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
@@ -39,6 +39,9 @@ def reset_c14_state():
     hinge = bpy.data.objects.get("Hinge_Green_Yellow")
     if hinge and hinge.animation_data:
         hinge.animation_data_clear()
+    if hinge:
+        hinge.rotation_mode = 'XYZ'
+        hinge.rotation_euler = (0.0, 0.0, 0.0)
 
     ball = bpy.data.objects.get("Ball")
     if ball:
@@ -49,26 +52,8 @@ def reset_c14_state():
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
 
-    # Zero hinge rotation (animation_data_clear freezes it at current angle)
-    if hinge:
-        hinge.rotation_mode  = 'XYZ'
-        hinge.rotation_euler = (0.0, 0.0, 0.0)
-
     bpy.context.view_layer.update()
-
-    # Unparent Green and restore canonical position
-    green = bpy.data.objects.get("Cube_Green")
-    if green:
-        if green.animation_data:
-            green.animation_data_clear()
-        green.parent = None
-        bpy.context.view_layer.update()
-        green.location       = (-0.51, 0.0, 1.0)
-        green.rotation_mode  = 'XYZ'
-        green.rotation_euler = (0.0, 0.0, 0.0)
-
-    bpy.context.view_layer.update()
-    print("=== C14 reset: hinge zeroed, Green unparented and repositioned ===")
+    print("=== C14 state reset (Hinge_Green_Yellow + ball only) ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -150,21 +135,44 @@ def setup_green_to_yellow():
         print("ERROR: Missing objects:", missing)
         return False
 
+    # --- 7B: Reset hinge rotation ---
     bpy.context.scene.frame_set(F_START)
-    hinge.rotation_mode = 'XYZ'
     hinge.rotation_euler = (0, 0, 0)
     bpy.context.view_layer.update()
 
-    # Parent Green to Hinge_Green_Yellow only — Blue/Red ride with the rig
+    # --- 7C: Parent Cube_Green to Hinge_Green_Yellow ---
     if green.parent != hinge:
         parent_preserve_world(green, hinge)
-        print("Green parented to Hinge_Green_Yellow.")
-    else:
-        print("Green already parented to Hinge_Green_Yellow — skipped.")
+        print("Cube_Green parented to Hinge_Green_Yellow.")
+
+    # --- 7D: Set Blue to canonical position (stationary, unparented) ---
+    blue = bpy.data.objects.get("Cube_Blue")
+    if blue:
+        blue.parent = None
+        blue.location = (0.51, 0.51, 1.0)
+        blue.rotation_mode = 'XYZ'
+        blue.rotation_euler = (0.0, 0.0, 0.0)
+        print("Cube_Blue set to canonical position (stationary).")
 
     bpy.context.view_layer.update()
 
+    # --- 7E: Remove rigid body from ball ---
+    if ball.rigid_body:
+        bpy.context.view_layer.objects.active = ball
+        try:
+            bpy.ops.rigidbody.object_remove()
+        except Exception:
+            try:
+                ball.rigid_body.kinematic = True
+            except Exception:
+                pass
+
+    bpy.context.view_layer.update()
+
+    # --- 7F: Create Seat_Green empty parented to Cube_Green ---
+    ball_world = ball.matrix_world.translation.copy()
     seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
+    print(f"Ball world pos: {ball_world[:]}")
     print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
     print(f"Seat_Green local (converted): {seat_green_local[:]}\n")
     seat_green = bpy.data.objects.new("Seat_Green", None)
@@ -175,6 +183,7 @@ def setup_green_to_yellow():
     seat_green.location = seat_green_local
     print("Seat_Green created inside Cube_Green.")
 
+    # --- 7G: Create Seat_Yellow empty parented to Cube_Yellow ---
     seat_yellow_local = yellow.matrix_world.inverted() @ SEAT_YELLOW_WORLD
     print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}")
     print(f"Seat_Yellow local (converted): {seat_yellow_local[:]}\n")
@@ -188,8 +197,9 @@ def setup_green_to_yellow():
 
     bpy.context.view_layer.update()
     print(f"Seat_Green  world actual: {seat_green.matrix_world.translation[:]}")
-    print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}\n")
+    print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}")
 
+    # --- 7H: Ball COPY_TRANSFORMS constraints ---
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name = "Latch_Green"
     latch_green.target = seat_green
@@ -198,9 +208,9 @@ def setup_green_to_yellow():
     latch_yellow = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_yellow.name = "Latch_Yellow"
     latch_yellow.target = seat_yellow
-    print("Latch_Yellow created.")
+    print("Latch_Yellow created — available for reuse by C15.")
 
-    # Only Hinge_Green_Yellow is keyed — Blue/Red/Hinge_Blue_Red/Hinge_Red_Green NOT touched
+    # --- 7I: Keyframe hinge rotation (LINEAR) ---
     key_rot_x(hinge, F_START,   0)
     key_rot_x(hinge, F_MID,    90)
     key_rot_x(hinge, F_HOLD,  180)
@@ -209,6 +219,7 @@ def setup_green_to_yellow():
     key_rot_x(hinge, F_END,     0)
     print("Hinge_Green_Yellow rotation keyed — LINEAR.")
 
+    # --- 7J: Keyframe constraint influences (CONSTANT) ---
     key_influence(ball, "Latch_Green",  F_START, 1.0)
     key_influence(ball, "Latch_Yellow", F_START, 0.0)
     key_influence(ball, "Latch_Green",  F_HOLD,  1.0)
@@ -219,6 +230,7 @@ def setup_green_to_yellow():
     key_influence(ball, "Latch_Yellow", F_END,   1.0)
     print("Ball influences keyed — CONSTANT.")
 
+    # --- 7J: Set frame range and reset to F_START ---
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
@@ -226,7 +238,7 @@ def setup_green_to_yellow():
     print("=== C14 Complete: Green → Yellow ===")
     print(f"Frames {F_START}–{F_END} | Transfer at frame {F_HOLD}→{F_SWAP}")
     print(f"ROT_SIGN: {ROT_SIGN} | Axis: X | Hinge: Hinge_Green_Yellow")
-    print("Blue + Red ride passively — Hinge_Blue_Red + Hinge_Red_Green NOT keyed.")
+    print(f"Latch_Yellow left active at influence 1.0 — ready for C15 reuse.")
     return True
 
 ################################################################################

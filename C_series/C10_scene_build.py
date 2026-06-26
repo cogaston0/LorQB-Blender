@@ -1,5 +1,15 @@
-# C10_scene_build.py  — v3  (Blender 5.0.1 — Reset to Base panel added)
+# C10_scene_build.py  — v4  (Blender 5.1.0 compatible — Material colors fixed)
 import bpy
+
+bpy.context.scene.render.engine = 'BLENDER_WORKBENCH'
+
+for area in bpy.context.screen.areas:
+    if area.type == 'VIEW_3D':
+        space = area.spaces[0]
+        space.shading.type = 'SOLID'
+        space.shading.color_type = 'OBJECT'
+        break
+
 
 ################################################################################
 # SECTION 1: Clear scene helper
@@ -87,26 +97,33 @@ def create_hollow_cube(location, color, side_hole_direction=None):
         bpy.ops.object.modifier_apply(modifier="Boolean_Side_Hole")
         bpy.data.objects.remove(side_cylinder)
 
-    # --- Material ---
+    # --- Material (Blender 5.1.0 compatible) ---
     mat = bpy.data.materials.new(name=f"Mat_{outer_cube.name}")
     mat.use_nodes = True
-    mat.diffuse_color = (*color, 0.35)  # Viewport display color with transparency
+
+    # Set viewport display color with full opacity for solid mode visibility
+    mat.diffuse_color = (*color, 1.0)
+
+    # Configure material nodes for rendering
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
     if bsdf:
         bsdf.inputs["Base Color"].default_value = (*color, 1.0)
         bsdf.inputs["Alpha"].default_value = 0.35
-    mat.blend_method = 'HASHED'
-    if hasattr(mat, "surface_render_method"):
-        try:
-            mat.surface_render_method = 'DITHERED'
-        except Exception:
-            pass
-    if hasattr(mat, "shadow_method"):
-        try:
-            mat.shadow_method = 'NONE'
-        except Exception:
-            pass
+        bsdf.inputs["Transmission Weight"].default_value = 0.5
+        bsdf.inputs["Roughness"].default_value = 0.1
+
+    # Enable transparency for rendering
+    mat.surface_render_method = 'BLENDED'
+    mat.show_transparent_back = False
+
+    # Blender 5.1.0 settings
+    if hasattr(mat, "use_backface_culling"):
+        mat.use_backface_culling = False
+
     outer_cube.data.materials.append(mat)
+
+    # Set object viewport display color (key for Solid mode)
+    outer_cube.color = (*color, 1.0)
 
     return outer_cube
 
@@ -220,13 +237,18 @@ def build_scene():
     for key, seat in seats.items():
         print(f"  {seat.name} @ {tuple(round(v, 4) for v in seat.location)}")
 
-    # ── Force viewport shading to show material colors ───────────────────────
-    for area in bpy.context.screen.areas:
-        if area.type == 'VIEW_3D':
-            for space in area.spaces:
-                if space.type == 'VIEW_3D':
-                    space.shading.type       = 'SOLID'
-                    space.shading.color_type = 'MATERIAL'
+    # ── Force viewport shading to show material colors (Blender 5.1.0) ─────────
+    # Set all 3D viewports to show material colors
+    for window in bpy.context.window_manager.windows:
+        for area in window.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'SOLID'
+                        space.shading.color_type = 'OBJECT'
+                        space.shading.light = 'STUDIO'
+                        space.shading.show_xray = True
+                        space.shading.xray_alpha = 0.35
 
     print("=== LorQB Scene Setup Complete ===")
     print("Chain (clockwise): Blue — Red — Green — Yellow")
