@@ -12,7 +12,7 @@
 import bpy
 import os
 
-SCRIPTS_DIR = r"C:\rukmini_ai_loop\scripts"
+SCRIPTS_DIR = r"C:\Users\cogas\source\repos\cogaston0\LorQB-Blender"
 C_DIR = os.path.join(SCRIPTS_DIR, "C_series")
 T_DIR = os.path.join(SCRIPTS_DIR, "T_series")
 
