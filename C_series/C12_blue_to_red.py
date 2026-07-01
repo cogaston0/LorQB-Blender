@@ -1,5 +1,5 @@
 # ============================================================================
-# lorqb_blue_to_red_C12.py  (Blender 5.0.1)
+# lorqb_blue_to_red_C12.py  (Blender 5.1.1)
 # C12 — Blue → Red
 # Frames 1 – 240 | Transfer at frame 120 → 121
 # Chain: Blue — Red — Green — Yellow
@@ -23,7 +23,7 @@ F_RET      = 180
 F_END      = 240
 
 ROT_AXIS   = 0
-ROT_SIGN   = +1.0
+ROT_SIGN   = +1.0   # Empirically confirmed working — do not change without viewport re-verification
 BALL_RADIUS = 0.25
 
 SEAT_RED_WORLD = mathutils.Vector((0.51, -0.51, 0.25))
@@ -66,7 +66,42 @@ def reset_scene_to_canonical():
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
 
+    # 5. Rebuild canonical parent chain (Rule 2: full standalone reset)
+    # Chain: Hinge_GY → Cube_Green → Hinge_RG → Cube_Red → Hinge_BR → Cube_Blue
+    chain = [
+        ("Cube_Blue",          "Hinge_Blue_Red"),
+        ("Hinge_Blue_Red",     "Cube_Red"),
+        ("Cube_Red",           "Hinge_Red_Green"),
+        ("Hinge_Red_Green",    "Cube_Green"),
+        ("Cube_Green",         "Hinge_Green_Yellow"),
+    ]
+    for child_name, parent_name in chain:
+        child  = bpy.data.objects.get(child_name)
+        parent = bpy.data.objects.get(parent_name)
+        if child and parent and child.parent != parent:
+            mw = child.matrix_world.copy()
+            child.parent = parent
+            child.matrix_parent_inverse = parent.matrix_world.inverted()
+            child.matrix_world = mw
+            bpy.context.view_layer.update()
+            print(f"  Chain: {child_name} → {parent_name}")
+
+    # 6. Restore canonical world positions for all cubes and hinges
+    canonical_positions = {
+        "Cube_Blue":          (0.51,  0.51,  0.25),
+        "Cube_Red":           (0.51, -0.51,  0.25),
+        "Cube_Green":         (-0.51, -0.51, 0.25),
+        "Cube_Yellow":        (-0.51,  0.51,  0.25),
+        "Hinge_Blue_Red":     (0.51,  0.0,   1.0),
+        "Hinge_Red_Green":    (0.0,  -0.51,  1.0),
+        "Hinge_Green_Yellow": (-0.51,  0.0,   1.0),
+    }
+    for obj_name, pos in canonical_positions.items():
+        obj = bpy.data.objects.get(obj_name)
+        if obj:
+            obj.location = mathutils.Vector(pos)
     bpy.context.view_layer.update()
+
     print("=== Scene reset to canonical state ===")
 
 ################################################################################
