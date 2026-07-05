@@ -1,5 +1,5 @@
 # ============================================================================
-# lorqb_green_to_yellow_C14.py  (Blender 5.0.1)
+# lorqb_green_to_yellow_C14.py  (Blender 5.1.1)
 # C14 — Green → Yellow
 # Frames 481 – 720 | Transfer at frame 600 → 601
 # Chain: Blue — Red — Green — Yellow
@@ -31,29 +31,78 @@ SEAT_GREEN_WORLD  = mathutils.Vector((-0.51, -0.51, 0.25))
 SEAT_YELLOW_WORLD = mathutils.Vector((-0.51,  0.51, 0.25))
 
 ################################################################################
-# SECTION 2: RESET — Clear only Hinge_Green_Yellow and ball state.
-# Blue, Red, Hinge_Blue_Red, Hinge_Red_Green are NOT touched —
-# they ride passively as part of the physical rig attached to Green.
+# SECTION 2: RESET — Full standalone scene reset (Rule 2)
+# Clears ALL hinges, rebuilds full parent chain, restores canonical positions.
+# No assumption is made about state left by any prior script.
 ################################################################################
-def reset_c14_state():
-    hinge = bpy.data.objects.get("Hinge_Green_Yellow")
-    if hinge and hinge.animation_data:
-        hinge.animation_data_clear()
-    if hinge:
-        hinge.rotation_mode = 'XYZ'
-        hinge.rotation_euler = (0.0, 0.0, 0.0)
+def reset_scene_to_canonical():
+    all_names = [
+        "Ball",
+        "Cube_Blue", "Cube_Red", "Cube_Green", "Cube_Yellow",
+        "Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow",
+    ]
 
+    # 1. Clear ALL animation data
+    for name in all_names:
+        obj = bpy.data.objects.get(name)
+        if obj and obj.animation_data:
+            obj.animation_data_clear()
+
+    # 2. Clear ball constraints
     ball = bpy.data.objects.get("Ball")
     if ball:
         ball.constraints.clear()
 
-    for seat_name in ["Seat_Green", "Seat_Yellow"]:
+    # 3. Reset ALL hinges to 0 rotation
+    for hinge_name in ["Hinge_Blue_Red", "Hinge_Red_Green", "Hinge_Green_Yellow"]:
+        hinge = bpy.data.objects.get(hinge_name)
+        if hinge:
+            hinge.rotation_mode = 'XYZ'
+            hinge.rotation_euler = (0.0, 0.0, 0.0)
+
+    # 4. Remove stale Seat empties
+    for seat_name in ["Seat_Blue", "Seat_Red", "Seat_Green", "Seat_Yellow"]:
         seat = bpy.data.objects.get(seat_name)
         if seat:
             bpy.data.objects.remove(seat, do_unlink=True)
 
+    # 5. Rebuild canonical parent chain (Rule 6: no topology bypasses)
+    # Chain: Hinge_GY → Cube_Green → Hinge_RG → Cube_Red → Hinge_BR → Cube_Blue
+    chain = [
+        ("Cube_Blue",          "Hinge_Blue_Red"),
+        ("Hinge_Blue_Red",     "Cube_Red"),
+        ("Cube_Red",           "Hinge_Red_Green"),
+        ("Hinge_Red_Green",    "Cube_Green"),
+        ("Cube_Green",         "Hinge_Green_Yellow"),
+    ]
+    for child_name, parent_name in chain:
+        child  = bpy.data.objects.get(child_name)
+        parent = bpy.data.objects.get(parent_name)
+        if child and parent and child.parent != parent:
+            mw = child.matrix_world.copy()
+            child.parent = parent
+            child.matrix_parent_inverse = parent.matrix_world.inverted()
+            child.matrix_world = mw
+            bpy.context.view_layer.update()
+            print(f"  Chain: {child_name} → {parent_name}")
+
+    # 6. Restore canonical world positions
+    canonical_positions = {
+        "Cube_Blue":          (0.51,  0.51,  0.25),
+        "Cube_Red":           (0.51, -0.51,  0.25),
+        "Cube_Green":         (-0.51, -0.51, 0.25),
+        "Cube_Yellow":        (-0.51,  0.51,  0.25),
+        "Hinge_Blue_Red":     (0.51,  0.0,   1.0),
+        "Hinge_Red_Green":    (0.0,  -0.51,  1.0),
+        "Hinge_Green_Yellow": (-0.51,  0.0,   1.0),
+    }
+    for obj_name, pos in canonical_positions.items():
+        obj = bpy.data.objects.get(obj_name)
+        if obj:
+            obj.location = mathutils.Vector(pos)
     bpy.context.view_layer.update()
-    print("=== C14 state reset (Hinge_Green_Yellow + ball only) ===")
+
+    print("=== C14 scene reset to canonical state ===")
 
 ################################################################################
 # SECTION 3: Helper — set interpolation on a specific keyframe by frame number
@@ -117,7 +166,7 @@ def parent_preserve_world(child, new_parent):
 def setup_green_to_yellow():
     print("=== C14 Start: Green → Yellow ===")
 
-    reset_c14_state()
+    reset_scene_to_canonical()
 
     green  = bpy.data.objects.get("Cube_Green")
     yellow = bpy.data.objects.get("Cube_Yellow")
@@ -145,18 +194,7 @@ def setup_green_to_yellow():
         parent_preserve_world(green, hinge)
         print("Cube_Green parented to Hinge_Green_Yellow.")
 
-    # --- 7D: Set Blue to canonical position (stationary, unparented) ---
-    blue = bpy.data.objects.get("Cube_Blue")
-    if blue:
-        blue.parent = None
-        blue.location = (0.51, 0.51, 1.0)
-        blue.rotation_mode = 'XYZ'
-        blue.rotation_euler = (0.0, 0.0, 0.0)
-        print("Cube_Blue set to canonical position (stationary).")
-
-    bpy.context.view_layer.update()
-
-    # --- 7E: Remove rigid body from ball ---
+    # --- 7D: Remove rigid body from ball ---
     if ball.rigid_body:
         bpy.context.view_layer.objects.active = ball
         try:
@@ -169,9 +207,10 @@ def setup_green_to_yellow():
 
     bpy.context.view_layer.update()
 
-    # --- 7F: Create Seat_Green empty parented to Cube_Green ---
+    # --- 7E: Create Seat_Green empty parented to Cube_Green ---
+    # Seat_Green captured from ball's actual world position (Rule 3)
     ball_world = ball.matrix_world.translation.copy()
-    seat_green_local = green.matrix_world.inverted() @ SEAT_GREEN_WORLD
+    seat_green_local = green.matrix_world.inverted() @ ball_world
     print(f"Ball world pos: {ball_world[:]}")
     print(f"Seat_Green world (target): {SEAT_GREEN_WORLD[:]}")
     print(f"Seat_Green local (converted): {seat_green_local[:]}\n")
@@ -183,7 +222,7 @@ def setup_green_to_yellow():
     seat_green.location = seat_green_local
     print("Seat_Green created inside Cube_Green.")
 
-    # --- 7G: Create Seat_Yellow empty parented to Cube_Yellow ---
+    # --- 7F: Create Seat_Yellow empty parented to Cube_Yellow ---
     seat_yellow_local = yellow.matrix_world.inverted() @ SEAT_YELLOW_WORLD
     print(f"Seat_Yellow world (target): {SEAT_YELLOW_WORLD[:]}")
     print(f"Seat_Yellow local (converted): {seat_yellow_local[:]}\n")
@@ -199,7 +238,7 @@ def setup_green_to_yellow():
     print(f"Seat_Green  world actual: {seat_green.matrix_world.translation[:]}")
     print(f"Seat_Yellow world actual: {seat_yellow.matrix_world.translation[:]}")
 
-    # --- 7H: Ball COPY_TRANSFORMS constraints ---
+    # --- 7G: Ball COPY_TRANSFORMS constraints ---
     latch_green = ball.constraints.new(type='COPY_TRANSFORMS')
     latch_green.name = "Latch_Green"
     latch_green.target = seat_green
@@ -210,7 +249,7 @@ def setup_green_to_yellow():
     latch_yellow.target = seat_yellow
     print("Latch_Yellow created — available for reuse by C15.")
 
-    # --- 7I: Keyframe hinge rotation (LINEAR) ---
+    # --- 7H: Keyframe hinge rotation (LINEAR) ---
     key_rot_x(hinge, F_START,   0)
     key_rot_x(hinge, F_MID,    90)
     key_rot_x(hinge, F_HOLD,  180)
@@ -219,7 +258,7 @@ def setup_green_to_yellow():
     key_rot_x(hinge, F_END,     0)
     print("Hinge_Green_Yellow rotation keyed — LINEAR.")
 
-    # --- 7J: Keyframe constraint influences (CONSTANT) ---
+    # --- 7I: Keyframe constraint influences (CONSTANT) ---
     key_influence(ball, "Latch_Green",  F_START, 1.0)
     key_influence(ball, "Latch_Yellow", F_START, 0.0)
     key_influence(ball, "Latch_Green",  F_HOLD,  1.0)
@@ -230,7 +269,7 @@ def setup_green_to_yellow():
     key_influence(ball, "Latch_Yellow", F_END,   1.0)
     print("Ball influences keyed — CONSTANT.")
 
-    # --- 7J: Set frame range and reset to F_START ---
+    # --- 7J: Set frame range, reset to F_START ---
     bpy.context.scene.frame_start = F_START
     bpy.context.scene.frame_end   = F_END
     bpy.context.scene.frame_set(F_START)
@@ -250,7 +289,7 @@ class LORQB_OT_ResetC14(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        reset_c14_state()
+        reset_scene_to_canonical()
         self.report({'INFO'}, "Reset to base complete")
         return {'FINISHED'}
 
