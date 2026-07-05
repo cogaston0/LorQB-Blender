@@ -107,6 +107,10 @@ def reset_scene_to_canonical():
             child.matrix_parent_inverse = parent.matrix_world.inverted()
             child.matrix_world = mw
             bpy.context.view_layer.update()
+    # 8. Place ball inside Cube_Green (canonical start for C14)
+    ball = bpy.data.objects.get("Ball")
+    if ball and ball.parent is None:
+        ball.location = mathutils.Vector((-0.51, -0.51, 0.25))
     bpy.context.view_layer.update()
 
     print("=== C14 scene reset to canonical state ===")
@@ -313,7 +317,7 @@ class LORQB_PT_C14Panel(bpy.types.Panel):
         layout.separator()
         layout.operator("lorqb.green_to_yellow", text="Run C14: Green → Yellow", icon="CONSTRAINT")
         col = layout.column(align=True)
-        col.label(text="Transfer: Frame 600 → 601 @ 180°")
+        col.label(text="Transfer: Frame 120 → 121 @ 180°")
         col.separator()
         col.label(text="● Blue → Red → Green → Yellow")
         col.label(text="Only Hinge_Green_Yellow rotates")
