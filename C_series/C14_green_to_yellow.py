@@ -1,7 +1,7 @@
 # ============================================================================
 # lorqb_green_to_yellow_C14.py  (Blender 5.1.1)
 # C14 — Green → Yellow
-# Frames 481 – 720 | Transfer at frame 600 → 601
+# Frames 1 – 240 | Transfer at frame 120 → 121
 # Chain: Blue — Red — Green — Yellow
 # Hinge: Hinge_Green_Yellow (X-axis rotation, ROT_SIGN = +1.0)
 # Ball rides Cube_Green (Latch_Green) → drops into Cube_Yellow (Latch_Yellow)
@@ -17,12 +17,12 @@ import mathutils
 ################################################################################
 # SECTION 1: Constants
 ################################################################################
-F_START = 481   # Start: Green at 0°, ball in Green
-F_MID   = 540   # Mid:   Green at 90°
-F_HOLD  = 600   # Hold:  Green at 180° — ball aligned above Yellow
-F_SWAP  = 601   # Swap:  ball transfers from Latch_Green to Latch_Yellow
-F_RET   = 660   # Return: Green at 90° on way back
-F_END   = 720   # End:   Green at 0°, ball in Yellow
+F_START = 1     # Start: Green at 0°, ball in Green
+F_MID   = 60    # Mid:   Green at 90°
+F_HOLD  = 120   # Hold:  Green at 180° — ball aligned above Yellow
+F_SWAP  = 121   # Swap:  ball transfers from Latch_Green to Latch_Yellow
+F_RET   = 180   # Return: Green at 90° on way back
+F_END   = 240   # End:   Green at 0°, ball in Yellow
 
 ROT_AXIS = 0        # X-axis index in rotation_euler
 ROT_SIGN = -1.0     # TODO: verify empirically in viewport — never infer from other scripts

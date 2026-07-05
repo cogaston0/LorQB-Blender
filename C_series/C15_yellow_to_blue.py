@@ -1,7 +1,7 @@
 # ============================================================================
-# C15_yellow_to_blue.py  (Blender 5.0.1)
+# C15_yellow_to_blue.py  (Blender 5.1.1)
 # C15 — Yellow -> Blue
-# Frames 720–960 | Transfer at 840→841
+# Frames 1–240 | Transfer at 120→121
 # Chain: Blue — Red — Green — Yellow
 # Hinge: Hinge_Red_Green (Y axis, ROT_SIGN = +1.0)
 # Green+Yellow swing as one unit toward Blue+Red — ball deposits into Blue
@@ -25,13 +25,12 @@ OBJ_RED     = "Cube_Red"
 CON_YELLOW  = "C15_Yellow"
 CON_BLUE    = "C15_Blue"
 
-F_ZERO       = 1
-F_START      = 720
-F_MID        = 780
-F_TRANSFER   = 840
-F_TRANSFER_1 = 841
-F_RET        = 900
-F_END        = 960
+F_START      = 1
+F_MID        = 60
+F_TRANSFER   = 120
+F_TRANSFER_1 = 121
+F_RET        = 180
+F_END        = 240
 
 ROT_AXIS = 1
 ROT_SIGN = +1.0
@@ -236,9 +235,9 @@ def setup_yellow_to_blue():
     bpy.context.view_layer.update()
 
     # --- 8J: Hinge rotation keyframes — Y axis LINEAR ---
-    bpy.context.scene.frame_set(F_ZERO)
+    bpy.context.scene.frame_set(F_START)
     hinge.rotation_euler[ROT_AXIS] = 0.0
-    hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_ZERO)
+    hinge.keyframe_insert(data_path="rotation_euler", index=ROT_AXIS, frame=F_START)
 
     bpy.context.scene.frame_set(F_START)
     hinge.rotation_euler[ROT_AXIS] = ROT_SIGN * math.radians(0)

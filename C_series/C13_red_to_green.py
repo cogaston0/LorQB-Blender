@@ -1,7 +1,7 @@
 # ============================================================================
 # C13_red_to_green.py  (Blender 5.1.1)
 # C13 — Red → Green
-# Frames 241 – 480 | Transfer at frame 360 → 361
+# Frames 1 – 240 | Transfer at frame 120 → 121
 # Chain: Blue — Red — Green — Yellow
 # Hinge: Hinge_Red_Green (Y-axis rotation, ROT_SIGN = -1.0)
 # Ball rides Cube_Red (Latch_Red) → drops into Cube_Green (Latch_Green)
@@ -15,12 +15,12 @@ import mathutils
 ################################################################################
 # SECTION 1: Constants
 ################################################################################
-F_START = 241   # Start: Red at 0°, ball in Red
-F_MID   = 300   # Mid:   Red at 90°
-F_HOLD  = 360   # Hold:  Red at 180° — ball aligned above Green
-F_SWAP  = 361   # Swap:  ball transfers from Latch_Red to Latch_Green
-F_RET   = 420   # Return: Red at 90° on way back
-F_END   = 480   # End:   Red at 0°, ball in Green
+F_START = 1     # Start: Red at 0°, ball in Red
+F_MID   = 60    # Mid:   Red at 90°
+F_HOLD  = 120   # Hold:  Red at 180° — ball aligned above Green
+F_SWAP  = 121   # Swap:  ball transfers from Latch_Red to Latch_Green
+F_RET   = 180   # Return: Red at 90° on way back
+F_END   = 240   # End:   Red at 0°, ball in Green
 
 ROT_AXIS = 1        # Y-axis index in rotation_euler
 ROT_SIGN = -1.0     # Negative Y rotation swings Red correctly over Green
